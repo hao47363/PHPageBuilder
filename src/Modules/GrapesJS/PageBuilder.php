@@ -11,6 +11,7 @@ use PHPageBuilder\Modules\GrapesJS\Upload\Uploader;
 use PHPageBuilder\Repositories\PageRepository;
 use PHPageBuilder\Repositories\UploadRepository;
 use Exception;
+use PHPageBuilder\Theme;
 
 class PageBuilder implements PageBuilderContract
 {
@@ -53,6 +54,51 @@ class PageBuilder implements PageBuilderContract
     public function setTheme(ThemeContract $theme)
     {
         $this->theme = $theme;
+    }
+
+    public function saveAllAsHtml($page, $passed_domain, $status)
+    {
+        // TODO: not sure if there is any cascade effect, but this seems unnecessary
+        // $pageObj = (new PageRepository)->findWithId($page->getId());
+        $translations = $page->getTranslations();
+        $domains = phpb_config('domains');
+
+        foreach ($translations as $transKey => $transVal) {
+            foreach ($domains as $domainKey => $domainValue) {
+                $this->saveAsHtml($page, $transKey, $domainValue, $domainKey, $passed_domain, $status);
+            }
+        }
+    }
+
+    public function forceFilePutContents(string $fullPathWithFileName, string $fileContents)
+    {
+        $exploded = explode(DIRECTORY_SEPARATOR, $fullPathWithFileName);
+
+        array_pop($exploded);
+
+        $directoryPathOnly = implode(DIRECTORY_SEPARATOR, $exploded);
+
+        if (!file_exists($directoryPathOnly)) {
+            mkdir($directoryPathOnly, 0775, true);
+        }
+        file_put_contents($fullPathWithFileName, $fileContents);
+    }
+
+    public function saveAsHtml($page, $currentLanguage, $layout, $domain, $passed_domain, $status)
+    {
+        $theme = new Theme(phpb_config('theme'), phpb_config('theme.active_theme'));
+        $page->layout = $layout;
+        $pageRenderer = new PageRenderer($theme, $page);
+        $pageRenderer->setLanguage($currentLanguage);
+        $html = $pageRenderer->render();
+        // TODO: the root could be changed if it is not served through laravel
+        if ($passed_domain !== null && $domain === $passed_domain) {
+            if ($status === true) {
+                $this->forceFilePutContents(phpb_config('folders.staging') . '/' . $domain . '/' . $currentLanguage . '/' . $page->getRoute() . '_' . date('Y_m_d_His') . '.html', $html);
+                $this->forceFilePutContents(phpb_config('folders.production') . '/' . $domain . '/' . $currentLanguage . '/' . $page->getRoute() . '.html', $html);
+            }
+            $this->forceFilePutContents(phpb_config('folders.staging') . '/' . $domain . '/' . $currentLanguage . '/' . $page->getRoute() . '.html', $html);
+        }
     }
 
     /**
