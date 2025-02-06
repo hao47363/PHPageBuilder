@@ -126,7 +126,7 @@ class PageRepository extends BaseRepository implements PageRepositoryContract
     public function updatePageData($page, array $data)
     {
         $updateResult = parent::update($page, [
-            'data' => json_encode($data),
+            'data' => json_encode($data, JSON_UNESCAPED_UNICODE),
         ]);
         $page->invalidateCache();
         return $updateResult;

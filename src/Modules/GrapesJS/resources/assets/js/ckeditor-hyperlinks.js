@@ -53,7 +53,7 @@ $(document).ready(function() {
                 label: 'Linktype',
                 'default': '',
                 items: [
-                    [window.translations['page'], "page"],
+                    // [window.translations['page'], "page"],
                     ["URL", "url"]
                 ],
                 onChange: function(obj) {
@@ -69,9 +69,11 @@ $(document).ready(function() {
                 },
                 setup: function(data) {
                     if (data.type === undefined) {
-                        this.setValue('page');
+                        // this.setValue('page');
+                        this.setValue('url');
                     } else if (data.type === 'url' && data.url.url.startsWith('[page id=')) {
-                        this.setValue('page');
+                        // this.setValue('page');
+                        this.setValue('url');
                     } else {
                         this.setValue(data.type);
                     }
