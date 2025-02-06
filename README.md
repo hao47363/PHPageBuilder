@@ -27,7 +27,7 @@ Whether you are a novice or an experienced web developer, PHPagebuilder can make
 
 ### Page Builder
 PHPagebuilder features a page builder built on [GrapesJS](https://grapesjs.com/).
-![PageBuilder](https://user-images.githubusercontent.com/5946444/70818285-97c81a80-1dd3-11ea-84b0-2a6ff3a8765a.png)
+![PageBuilder](https://github.com/HansSchouten/PHPageBuilder/assets/5946444/ed65f20a-bad2-4194-af01-66f27140ba0c)
 
 ### Website Manager
 A basic website manager is included with a [Bootstrap](https://getbootstrap.com/) UI. This website manager offers basic functionality to add or remove pages and to edit page settings like page title or URL. Clicking the edit button will open the page builder.
@@ -111,7 +111,7 @@ A shortcode can be used to include a block inside another block or into a layout
 To allow dropping blocks into a block in the page builder, a blocks container should be added. To add a blocks container, simply add `[blocks-container]` at the desired location in a block view file. The following html syntax allows dropping blocks inside a bootstrap container element:
 ```html
 <div class="container">
-    [block-container]
+    [blocks-container]
 </div>
 ```
 An alternative method is adding the `phpb-blocks-container` attribute to a html element, as shown in this example:
@@ -123,6 +123,60 @@ An alternative method is adding the `phpb-blocks-container` attribute to a html 
     </div>
 </div>
 ```
+
+## Extending PHPageBuilder
+
+PHPageBuilder allows you to create new blocks and layouts for your theme very easily. This is great for building specific websites & templates, however if you use PHPageBuilder in a CMS environment, you probably want to provide Plugins / Modules the ability to create their own blocks without modifying your theme's pre-existing components.
+
+PHPageBuilder allows you to register blocks, layouts and assets (CSS, JS) from Plugins, Composer Packages or through any other environment.
+
+### Adding a New Block
+
+```php
+/**
+ * @param string $slug - A Unique identifier for the block. Prefix author to avoid conflict.
+ * @param string $directoryPath - Path to the directory of the Block.
+ */
+\PHPageBuilder\Extensions::registerBlock($slug, $directoryPath);
+
+// Registering an example block:
+
+\PHPageBuilder\Extensions::registerBlock('foo-navbar', MY_PLUGIN_DIRECTORY . '/blocks/foo-navbar');
+```
+
+### Adding a New Layout
+
+```php
+/**
+ * @param string $slug - A Unique identifier for the layout. Prefix author to avoid conflict.
+ * @param string $directoryPath - Path to the directory of the Layout.
+ */
+\PHPageBuilder\Extensions::registerLayout($slug, $directoryPath);
+
+// Registering an example layout:
+
+\PHPageBuilder\Extensions::registerLayout('foo-master', MY_PLUGIN_DIRECTORY . '/layouts/foo-master');
+```
+
+### Adding Assets (CSS & JS)
+```php
+/**
+ * @param string $src                           - URL of the Asset file.
+ * @param string $type                          - 'style' or 'script' 
+ * @param string $location                      - 'header' or 'footer'
+ * @param array['$key' => '$value'] $attributes - Array of attributes to add to the tag.
+ */
+\PHPageBuilder\Extensions::registerAsset($src, $type, $location, $attributes = []);
+
+// Registering assets:
+
+\PHPageBuilder\Extensions::registerAsset('/assets/bootstrap.css', 'style', 'header');
+\PHPageBuilder\Extensions::registerAsset('/assets/alpine.min.js', 'script', 'header', [
+    'defer' => true
+]);
+```
+
+Blocks & Layouts are created in the same manner as described in [Create A Theme](#create-a-theme), but they aren't limited to any theme directory.
 
 ## Customize PHPageBuilder
 

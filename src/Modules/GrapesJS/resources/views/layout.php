@@ -5,64 +5,23 @@
     <title>PageBuilder</title>
     <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9, user-scalable=no">
 
-    <link rel="stylesheet" href="<?= phpb_asset('pagebuilder/grapes.min.css') ?>">
-    <link rel="stylesheet" href="<?= phpb_asset('static/css/bootstrap.min.css') ?>">
-    <link rel="stylesheet" href="<?= phpb_asset('static/css/bootstrap-select.min.css') ?>">
-    <link rel="stylesheet" href="<?= phpb_asset('static/css/font-awesome.min.css') ?>">
-    <link rel="stylesheet" href="<?= phpb_asset('static/css/toastr.min.css') ?>">
+    <link rel="stylesheet" href="<?= phpb_asset('pagebuilder/grapesjs-v0.15.9.min.css') ?>">
+    <link rel="stylesheet" href="<?= phpb_asset('pagebuilder/bootstrap-v4.3.1.min.css') ?>">
+    <link rel="stylesheet" href="<?= phpb_asset('pagebuilder/bootstrap-select-v1.13.12.min.css') ?>">
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css">
+    <link rel="stylesheet" href="<?= phpb_asset('pagebuilder/toastr-v2.1.3.min.css') ?>">
     <link rel="stylesheet" href="<?= phpb_asset('pagebuilder/app.css') ?>">
-    <!-- TODO: hard coded css style -->
-    <style>
-        .CodeMirror-code {
-            text-align: left;
-        }
-
-        .code-panel section .codepanel-separator {
-            display: flex;
-            justify-content: space-between;
-            padding-left: 0.6rem;
-            padding-right: 0.6rem;
-        }
-
-        .code-panel section .codepanel-label {
-            margin-top: 5px;
-            line-height: 20px;
-            font-size: 13px;
-            user-select: none;
-            text-transform: uppercase;
-            padding: 5px;
-        }
-
-        .cp-btn-container {
-            display: flex;
-            justify-content: space-evenly;
-        }
-
-        .gjs-btn-prim {
-            color: inherit;
-            background-color: rgba(255,255,255,.1);
-            border-radius: 2px;
-            padding: 5px;
-            cursor: pointer;
-            border: none;
-        }
-
-        .cp-btn-container .gjs-btn-prim {
-            margin: 2.5px;
-        }
-    </style>
-    <?= $pageBuilder->customStyle(); ?>
+    <link rel="icon" href="data:,">
     <?= $pageBuilder->customStyle(); ?>
 
-    <!--    Hard coded to use local grapes.min.js -->
-    <script type="text/javascript" src="<?= phpb_asset('pagebuilder/grapes.min.js') ?>"></script>
-    <script src="<?= phpb_asset('static/js/underscore-min.js') ?>"></script>
-    <script src="<?= phpb_asset('static/js/jquery-3.4.1.min.js') ?>"></script>
-    <script src="<?= phpb_asset('static/js/popper.min.js') ?>"></script>
-    <script src="<?= phpb_asset('static/js/bootstrap.min.js') ?>"></script>
-    <script src="<?= phpb_asset('static/js/bootstrap-select.min.js') ?>"></script>
-    <script src="<?= phpb_asset('static/js/toastr.min.js') ?>"></script>
-    <script src="<?= phpb_asset('static/js/beautify-html.min.js') ?>"></script>
+    <script src="<?= phpb_asset('pagebuilder/grapesjs-v0.15.9.min.js') ?>"></script>
+    <script src="<?= phpb_asset('pagebuilder/underscore-v1.9.1.min.js') ?>"></script>
+    <script src="<?= phpb_asset('pagebuilder/jquery-3.4.1.min.js') ?>"></script>
+    <script src="<?= phpb_asset('pagebuilder/popper-v1.12.9.min.js') ?>"></script>
+    <script src="<?= phpb_asset('pagebuilder/bootstrap-v4.3.1.min.js') ?>"></script>
+    <script src="<?= phpb_asset('pagebuilder/bootstrap-select-v1.13.12.min.js') ?>"></script>
+    <script src="<?= phpb_asset('pagebuilder/toastr-v2.1.3.min.js') ?>"></script>
+    <script src="<?= phpb_asset('pagebuilder/beautify-html-v1.10.2.min.js') ?>"></script>
     <?= $pageBuilder->customScripts('head'); ?>
 </head>
 
@@ -75,10 +34,4 @@ require __DIR__ . '/pagebuilder.php';
 <script src="<?= phpb_asset('pagebuilder/app.js') ?>"></script>
 <?= $pageBuilder->customScripts('body'); ?>
 </body>
-
-<style>
-    #cke_93_uiElement {
-        display: none;
-    }
-</style>
 </html>

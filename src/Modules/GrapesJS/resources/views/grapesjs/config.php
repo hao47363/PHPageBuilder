@@ -22,7 +22,7 @@ return [
             'id' => 'position',
             'name' => phpb_trans('pagebuilder.style-manager.sectors.position'),
             'open' => true,
-            'buildProps' => ['width', 'height', 'min-width', 'min-height', 'max-width', 'max-height', 'position', 'top', 'bottom', 'left', 'right', 'padding', 'margin', 'text-align'],
+            'buildProps' => ['width', 'height', 'min-width', 'min-height', 'max-width', 'max-height', 'padding', 'margin', 'text-align'],
             'properties' => [[
                 'property' => 'text-align',
                 'list' => [
@@ -48,13 +48,6 @@ return [
             ['name' => 'active', 'label' => phpb_trans('pagebuilder.selector-manager.state-active')],
             ['name' => 'nth-of-type(2n)', 'label' => phpb_trans('pagebuilder.selector-manager.state-nth')]
         ],
-    ],
-    'deviceManager' => [
-        'devices' => [
-            ['name' => 'Desktop', 'width' => ''],
-            ['name' => 'Tablet', 'width' => '991px'],
-            ['name' => 'Mobile', 'width' => '480px']
-        ]
     ],
     'traitManager' => [
         'labelPlhText' => '',
@@ -86,14 +79,6 @@ return [
                         'command' => 'open-sm',
                         'togglable' => 0,
                         'attributes' => ['title' => phpb_trans('pagebuilder.view-style-manager')],
-                    ],
-                    // TODO: hard coded to add the custom code editor function
-                    [
-                        'id' => 'open-style-button',
-                        'className' => 'fa fa-file-code-o',
-                        'command' => 'open-code',
-                        'togglable' => 0,
-                        'attributes' => ['title' => 'Open Code'],
                     ]
                 ]
             ],
@@ -104,35 +89,25 @@ return [
             phpb_asset('pagebuilder/page-injection.css'),
         ],
     ],
-    'plugins' => ['grapesjs-touch', 'gjs-plugin-ckeditor', 'grapesjs-component-code-editor', "grapesjs-parser-postcss"],
+    'plugins' => ['grapesjs-touch', 'gjs-plugin-ckeditor'],
     'pluginsOpts' => [
         'gjs-plugin-ckeditor' => [
             'position' => 'left',
             'options' => [
                 'startupFocus' => true,
                 'allowedContent' => true,
+                //'forcePasteAsPlainText' => false, // when true does not copy UL, random JS errors while pasting
                 //'extraAllowedContent' => '*(*);*[*];ul ol li span', // allows classes, inline styles and certain elements
-                'enterMode' => 'CKEDITOR.ENTER_BR',
-                'extraPlugins' => 'sharedspace,justify,colorbutton,font',
+                //'enterMode' => 'CKEDITOR.ENTER_BR', // issues on pasting in Chromes
+                'extraPlugins' => 'sourcedialog',
+                'removePlugins' => 'exportpdf,magicline',
                 'toolbar' => [
                     ['Bold', 'Italic', 'Underline', 'Strike', 'Undo', 'Redo'],
-                    [
-                        'name' => 'links',
-                        'items' => ['Link', 'Unlink']
-                    ],
-                    [
-                        'name' => 'styles',
-                        'items' => ['FontSize']
-                    ],
-                    [
-                        'name' => 'paragraph',
-                        'groups' => ['list', 'indent', 'blocks', 'align'],
-                        'items' => ['NumberedList', 'BulletedList', 'Blockquote', '-', 'Outdent', 'Indent', '-', 'JustifyLeft', 'JustifyCenter', 'JustifyRight', 'JustifyBlock', '-']
-                    ],
-                    [
-                        'name' => 'colors',
-                        'items' => ['TextColor', 'BGColor']
-                    ],
+                    ['Link', 'Unlink'],
+                    ['NumberedList', 'BulletedList'],
+                    ['JustifyLeft', 'JustifyCenter', 'JustifyRight', 'JustifyBlock'],
+                    ['FontSize', 'TextColor'],
+                    ['Sourcedialog']
                 ],
             ]
         ]

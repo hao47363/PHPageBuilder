@@ -9,7 +9,7 @@ class ThemeLayout
     /**
      * @var $config
      */
-    protected $config;
+    protected $config = [];
 
     /**
      * @var ThemeContract $theme
@@ -22,17 +22,29 @@ class ThemeLayout
     protected $layoutSlug;
 
     /**
+     * @var bool $isExtension
+     * Determines if a block was registered by an extension.
+     */
+    protected $isExtension;
+
+    /**
+     * @var bool $extensionSlug
+     * Custom slug in case of extension.
+     */
+    protected $extensionSlug;
+
+    /**
      * Theme ThemeLayout.
      *
      * @param ThemeContract $theme         the theme this layout belongs to
      * @param string $layoutSlug
      */
-    public function __construct(ThemeContract $theme, string $layoutSlug)
+    public function __construct(ThemeContract $theme, string $layoutSlug, bool $isExtension = false, string $extensionSlug = null)
     {
         $this->theme = $theme;
         $this->layoutSlug = $layoutSlug;
-
-        $this->config = [];
+        $this->isExtension = $isExtension;
+        $this->extensionSlug = $extensionSlug;
         if (file_exists($this->getFolder() . '/config.php')) {
             $this->config = include $this->getFolder() . '/config.php';
         }
@@ -45,7 +57,7 @@ class ThemeLayout
      */
     public function getFolder()
     {
-        return $this->theme->getFolder() . '/layouts/' . $this->layoutSlug;
+        return ($this->isExtension) ? ($this->layoutSlug) : $this->theme->getFolder() . '/layouts/' . $this->layoutSlug;
     }
 
     /**
@@ -65,7 +77,7 @@ class ThemeLayout
      */
     public function getSlug()
     {
-        return $this->layoutSlug;
+        return $this->isExtension ? $this->extensionSlug : $this->layoutSlug;
     }
 
     /**

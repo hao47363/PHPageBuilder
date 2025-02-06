@@ -4,10 +4,6 @@ $(document).ready(function() {
     $(".gjs-pn-panels").prepend($("#sidebar-header"));
     $(".gjs-pn-panels").append($("#sidebar-bottom-buttons"));
 
-    $('.btn.set-view').click(function (event) {
-        window.editor.setDevice(event.currentTarget.dataset.view);
-    });
-
     $("#toggle-sidebar").click(function() {
         $("#gjs").toggleClass('sidebar-collapsed');
         triggerEditorResize();
@@ -24,14 +20,28 @@ $(document).ready(function() {
         $(".gjs-sm-sectors").parent().parent().css('display', 'none');
         $(".gjs-trt-traits").parent().parent().css('display', 'block');
     });
-    // TODO: hard code to se the block
-    window.editor.on('run:open-code', function(editor) {
-        $(".gjs-sm-sectors").parent().parent().css('display', 'none');
-        $(".gjs-trt-traits").parent().parent().css('display', 'none');
-    });
-    
+
     window.editor.on('block:drag:start', function(block) {
         autoCollapseSidebar();
+    });
+
+    window.editor.on('rteToolbarPosUpdate', function(toolbarPosition) {
+        if (! window.editor || ! window.editor.getSelected()) return;
+        let selectedDomComponent = window.editor.getSelected().getEl();
+        if (! selectedDomComponent) return;
+
+        setTimeout(function() {
+            let $toolbar = $(".gjs-rte-toolbar").first();
+            let toolbarInUpperHalf = $toolbar.offset().top < (toolbarPosition.elementTop + (0.5 * toolbarPosition.elementHeight));
+            if (toolbarInUpperHalf) {
+                let newTop = toolbarPosition.elementTop - $toolbar.height();
+                if (newTop > 0) {
+                    $toolbar.css('top', newTop + 'px');
+                } else {
+                    //$toolbar.css('top', (toolbarPosition.elementTop + toolbarPosition.elementHeight) + 'px');
+                }
+            }
+        }, 0);
     });
 
     function autoCollapseSidebar() {
@@ -67,21 +77,11 @@ window.addEventListener("message", onMessage, false);
 function onMessage(event) {
     // if the page is loaded, remove loading element
     if (event.data === 'page-loaded') {
-        editor.BlockManager.getAll().models = editor.BlockManager.getAll().models.sort(function compare(a, b) {
-            if (a.attributes.label < b.attributes.label) {
-                return -1;
-            }
-            if (a.attributes.label > b.attributes.label) {
-                return 1;
-            }
-            return 0;
-        });
-        editor.BlockManager.render();
         $("#phpb-loading").addClass('loaded');
         addBlockSearch();
         window.isLoaded = true;
         $(window).trigger('pagebuilder-page-loaded');
-    } else if(event.data === 'touch-start') {
+    } else if (event.data === 'touch-start') {
         window.touchStart();
     }
 }

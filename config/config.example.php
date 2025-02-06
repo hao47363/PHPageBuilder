@@ -7,6 +7,8 @@ return [
      |--------------------------------------------------------------------------
      |
      | General settings for configuring the PageBuilder.
+     | If you install phpb with Composer, general.assets_url line must be:
+     | 'assets_url' => '/vendor/hansschouten/phpagebuilder/dist',
      |
      */
     'general' => [
@@ -27,14 +29,14 @@ return [
     'storage' => [
         'use_database' => true,
         'database' => [
-            'driver' => 'mysql',
-            'host' => 'localhost',
-            'database' => '',
-            'username' => '',
-            'password' => '',
-            'charset' => 'utf8',
+            'driver'    => 'mysql',
+            'host'      => 'localhost',
+            'database'  => '',
+            'username'  => '',
+            'password'  => '',
+            'charset'   => 'utf8',
             'collation' => 'utf8_unicode_ci',
-            'prefix' => '',
+            'prefix'    => '',
         ],
         'uploads_folder' => __DIR__ . '/uploads'
     ],
@@ -94,8 +96,7 @@ return [
         'class' => PHPageBuilder\Modules\GrapesJS\PageBuilder::class,
         'url' => '/admin/pagebuilder',
         'actions' => [
-            'back' => '/admin',
-            'view' => '/preview',
+            'back' => '/admin'
         ]
     ],
 
@@ -176,14 +177,4 @@ return [
      */
     'class_replacements' => [
     ],
-
-    'domains' => [
-        'a.com' => 'master',
-        'b.com' => 'secondary',
-    ],
-
-    'folders' => [
-        'staging' => $_SERVER['DOCUMENT_ROOT'] . '/html/stag',
-        'production' => $_SERVER['DOCUMENT_ROOT'] . '/html/prod'
-    ]
 ];

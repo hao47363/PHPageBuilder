@@ -7,6 +7,7 @@ use PHPageBuilder\Contracts\ThemeContract;
 use PHPageBuilder\Modules\GrapesJS\Block\BlockRenderer;
 use PHPageBuilder\ThemeBlock;
 use Exception;
+use PHPageBuilder\Extensions;
 
 class PageRenderer
 {
@@ -51,6 +52,11 @@ class PageRenderer
     public static $canBeCached;
 
     /**
+     * @var string $skeletonCacheUrl
+     */
+    public static $skeletonCacheUrl;
+
+    /**
      * The maximum number of minutes this page should be cached, one week by default.
      *
      * @var int $cacheLifetime
@@ -69,7 +75,7 @@ class PageRenderer
         $this->theme = $theme;
         $this->page = $page;
         $this->pageData = $page->getBuilderData();
-        $this->shortcodeParser = new ShortcodeParser($this);
+        $this->shortcodeParser = phpb_instance(ShortcodeParser::class, [$this]);
         $this->setLanguage(phpb_current_language());
         $this->forPageBuilder = $forPageBuilder;
     }
@@ -81,6 +87,24 @@ class PageRenderer
      */
     public function setLanguage($language)
     {
+        // if the given language is unknown, default the set language to the first available language
+        $blockKeysAreLanguages = true;
+        $storedBlockLanguages = array_keys($this->pageData['blocks'] ?? []);
+        // check whether keys are valid languages (renderPageBuilderBlock uses pageData without language data)
+        foreach ($storedBlockLanguages as $supportedLanguage) {
+            if (strlen($supportedLanguage) > 5) {
+                $blockKeysAreLanguages = false;
+                break;
+            }
+        }
+        if ($blockKeysAreLanguages && ! empty($storedBlockLanguages) && ! in_array($language, $storedBlockLanguages)) {
+            if (! isset(phpb_active_languages()[$language])) {
+                $language = $storedBlockLanguages[0];
+            } else {
+                $this->pageData['blocks'][$language] = $this->pageData['blocks'][$storedBlockLanguages[0]];
+            }
+        }
+
         $this->language = $language;
         $this->pageBlocksData = $this->getStoredPageBlocksData();
         $this->shortcodeParser->setLanguage($language);
@@ -95,6 +119,11 @@ class PageRenderer
     {
         $layout = basename($this->page->getLayout());
         $layoutPath = $this->theme->getFolder() . '/layouts/' . $layout . '/view.php';
+
+        if ($path = Extensions::getLayout($layout)) {
+            $layoutPath = $path . '/view.php';
+        }
+
         return file_exists($layoutPath) ? $layoutPath : null;
     }
 
@@ -106,10 +135,10 @@ class PageRenderer
      */
     public static function setCanBeCached(bool $canBeCached, $cacheLifetime = null)
     {
-        if (! $canBeCached || ($cacheLifetime && intval($cacheLifetime) <= 0)) {
+        if (! $canBeCached || ($cacheLifetime && (int) $cacheLifetime <= 0)) {
             static::$canBeCached = false;
         } elseif ($cacheLifetime) {
-            static::$cacheLifetime = min(static::$cacheLifetime, intval($cacheLifetime));
+            static::$cacheLifetime = min(static::$cacheLifetime, (int) $cacheLifetime);
         }
     }
 
@@ -158,11 +187,7 @@ class PageRenderer
         // init variables that should be accessible in the view
         $renderer = $this;
         $page = $this->page;
-        if ($this->forPageBuilder) {
-            $body = '<div phpb-content-container="true"></div>';
-        } else {
-            $body = $this->renderBody();
-        }
+        $body = $this->forPageBuilder ? '<div phpb-content-container="true"></div>' : $this->renderBody();
 
         $layoutPath = $this->getPageLayoutPath();
         if ($layoutPath) {
@@ -209,7 +234,7 @@ class PageRenderer
 
         // include any style changes made via the page builder
         if (isset($data['css'])) {
-            $html .= '<style>' . $data['css'] . '</style>';
+            return '<style>' . $data['css'] . '</style>' . $html;
         }
 
         return $html;
@@ -228,7 +253,10 @@ class PageRenderer
      */
     public function renderBlock($slug, $id = null, $context = null, $maxDepth = 25)
     {
-        $themeBlock = new ThemeBlock($this->theme, $slug);
+        $themeBlock = ($blockPath = Extensions::getBlock($slug))
+            ? new ThemeBlock($this->theme, $blockPath, true, $slug)
+            : new ThemeBlock($this->theme, $slug);
+
         $id = $id ?? $themeBlock->getSlug();
         $context = $context[$id] ?? $this->pageBlocksData[$id] ?? [];
 
@@ -236,7 +264,7 @@ class PageRenderer
         $renderedBlock = $blockRenderer->render($themeBlock, $context ?? [], $id);
 
         // determine the context for rendering nested blocks
-        // if the current block is an html block, the context starts again at full page data
+        // if the current block is a html block, the context starts again at full page data
         // if the current block is a dynamic block, use the nested block data inside the current block's context
         $context = $context['blocks'] ?? [];
         if ($themeBlock->isHtmlBlock()) {

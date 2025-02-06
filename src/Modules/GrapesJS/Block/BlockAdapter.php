@@ -83,12 +83,9 @@ class BlockAdapter
     {
         $content = $this->pageRenderer->renderBlock($this->block->getSlug());
 
-        $filepath = '/img/thumbnails/' . $this->block->getSlug() . '.png';
-
         $img = '';
-
-        if (file_exists(public_path($filepath))) {
-            $img = '<div class="block-thumb"><img src="' . $filepath . '"></div>';
+        if (file_exists($this->block->getThumbPath())) {
+            $img = '<div class="block-thumb" style="background-image: url(' . phpb_full_url($this->block->getThumbUrl()) . '); background-size: cover"></div>';
         }
 
         $data = [
@@ -97,7 +94,7 @@ class BlockAdapter
             'content' => $content
         ];
 
-        if (! $img) {
+        if (empty($img)) {
             $iconClass = 'fa fa-bars';
             if ($this->block->get('icon')) {
                 $iconClass = $this->block->get('icon');
@@ -115,7 +112,7 @@ class BlockAdapter
      */
     public function getBlockSettingsArray()
     {
-        $blockSettings = $this->block->get('settings');
+        $blockSettings = $this->block::getDynamicConfig($this->getSlug())['settings'] ?? $this->block->get('settings');
         if ($this->block->isHtmlBlock() || ! is_array($blockSettings)) {
             return [];
         }

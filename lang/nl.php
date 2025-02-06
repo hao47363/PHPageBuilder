@@ -14,7 +14,9 @@ return [
         'pages' => 'Pagina\'s',
         'menus' => 'Menus',
         'name' => 'Naam',
-        'page-title' => 'Pagina titel',
+        'page-title' => 'Page menu titel',
+        'page-meta-title' => 'Pagina (meta) titel',
+        'page-meta-description' => 'Pagina meta omschrijving',
         'route' => 'URL',
         'layout' => 'Paginaopbouw',
         'actions' => 'Acties',
@@ -40,6 +42,7 @@ return [
         'render-thumbs' => 'Blok afbeeldingen genereren',
     ],
     'pagebuilder' => [
+        'filter-placeholder' => 'Filter',
         'loading-text' => 'Bewerkmodus laden..',
         'style-no-element-selected' => 'Selecteer een element om de opmaak aan te passen.',
         'trait-no-element-selected' => 'Selecteer een element om de eigenschappen aan te passen.',
@@ -62,12 +65,17 @@ return [
         'trait-manager' => [
             'link' => [
                 'text' => 'Tekst',
-                'target' => 'Open in nieuw tabblad?'
+                'target' => 'Open in nieuw tabblad?',
+                'tooltip' => 'knopinfo'
+            ],
+            'image' => [
+                'title' => 'Titel bij muis over',
+                'alt' => 'Alternatieve tekst als afbeelding niet geladen wordt',
             ],
             'no-settings' => 'Dit blok heeft geen instellingen.'
         ],
         'selector-manager' => [
-            'label' => 'CSS klasses',
+            'label' => 'CSS classes',
             'states-label' => 'Opmaak voor',
             'selected-label' => 'Geselecteerd',
             'state-hover' => 'Muis over element',
@@ -126,6 +134,7 @@ return [
         'en' => 'Engels',
         'nl' => 'Nederlands',
         'es' => 'Spaans',
+        'it' => 'Italiaans',
         'fr' => 'Frans',
         'de' => 'Duits',
     ],

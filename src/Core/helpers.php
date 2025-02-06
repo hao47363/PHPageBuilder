@@ -1,5 +1,7 @@
 <?php
 
+use PHPageBuilder\Extensions;
+
 if (! function_exists('phpb_e')) {
     /**
      * Encode HTML special characters in a string.
@@ -37,7 +39,10 @@ if (! function_exists('phpb_asset')) {
      */
     function phpb_asset($path)
     {
-        return phpb_full_url(phpb_config('general.assets_url') . '/' . $path);
+        $basePath = __DIR__ . '/../../dist/';
+        $distPath = realpath($basePath . $path);
+        $version = ($distPath && strpos($distPath, realpath($basePath)) === 0) ? filemtime($distPath) : '';
+        return phpb_full_url(phpb_config('general.assets_url') . '/' . $path) . '?v=' . $version;
     }
 }
 
@@ -51,7 +56,7 @@ if (! function_exists('phpb_theme_asset')) {
     function phpb_theme_asset($path)
     {
         $themeFolder = phpb_config('theme.folder_url') . '/' . phpb_config('theme.active_theme');
-        return $themeFolder . '/' . $path;
+        return phpb_full_url($themeFolder . '/' . $path);
     }
 }
 
@@ -134,7 +139,7 @@ if (! function_exists('phpb_trans')) {
      *
      * @param $key
      * @param array $parameters
-     * @return string
+     * @return string|array
      */
     function phpb_trans($key, $parameters = [])
     {
@@ -237,7 +242,7 @@ if (! function_exists('phpb_current_full_url')) {
      *
      * @return string|null
      */
-    function phpb_current_full_url()
+    function phpb_current_full_url($includeQueryString = true)
     {
         // return null when running form CLI
         if (! isset($_SERVER['SERVER_NAME']) || ! isset($_SERVER['REQUEST_URI'])) {
@@ -252,6 +257,12 @@ if (! function_exists('phpb_current_full_url')) {
 
         $currentFullUrl = $protocol . "://" . $_SERVER['SERVER_NAME'] . $port . urldecode($_SERVER['REQUEST_URI']);
         $currentFullUrl = rtrim($currentFullUrl, '/' . DIRECTORY_SEPARATOR);
+        if (! $includeQueryString) {
+            $currentFullUrl = explode('?', $currentFullUrl, 2)[0];
+        }
+        if (phpb_is_skeleton_data_request()) {
+            return str_replace('/skeleton-data/', '/', $currentFullUrl);
+        }
         return $currentFullUrl;
     }
 }
@@ -265,13 +276,38 @@ if (! function_exists('phpb_current_relative_url')) {
      */
     function phpb_current_relative_url()
     {
+        $currentFullUrl = phpb_current_full_url();
+        $relativeUrl = substr($currentFullUrl, strpos($currentFullUrl, '://') + 3);
+        // return / if we are at the root of the domain
+        if (strpos($relativeUrl, '/') === false) {
+            return '/';
+        }
+
+        $baseDirectory = '';
         $baseUrl = phpb_config('general.base_url');
         $baseUrl = rtrim($baseUrl, '/'. DIRECTORY_SEPARATOR);
+        $baseUrl = substr($baseUrl, strpos($baseUrl, '://') + 3);
+        if (strpos($baseUrl, '/') !== false) {
+            $baseDirectory = substr($baseUrl, strpos($baseUrl, '/'));
+        }
 
-        $currentFullUrl = phpb_current_full_url();
-        $relativeUrl = substr($currentFullUrl, strlen($baseUrl));
-        $relativeUrl = ltrim($relativeUrl, '/'. DIRECTORY_SEPARATOR);
-        return '/' . $relativeUrl;
+        // remove everything before the first /
+        $relativeUrl = substr($relativeUrl, strpos($relativeUrl, '/'));
+        // return relative URL without base directory
+        return str_replace($baseDirectory, '', $relativeUrl);
+    }
+}
+
+if (! function_exists('phpb_is_skeleton_data_request')) {
+    /**
+     * Return whether the current request is a request to retrieve skeleton data.
+     *
+     * @return bool
+     */
+    function phpb_is_skeleton_data_request()
+    {
+        $skeletonDataPrefix = '/skeleton-data/';
+        return substr($_SERVER['REQUEST_URI'], 0, strlen($skeletonDataPrefix)) === $skeletonDataPrefix;
     }
 }
 
@@ -293,7 +329,14 @@ if (! function_exists('phpb_current_language')) {
                 }
             }
         }
-        return phpb_config('general.language');
+        $languageCode = phpb_config('general.language');
+        if (in_array($languageCode, array_keys(phpb_active_languages()))) {
+            return $languageCode;
+        }
+        if (in_array('en', array_keys(phpb_active_languages()))) {
+            return 'en';
+        }
+        return array_keys(phpb_active_languages())[0];
     }
 }
 
@@ -361,14 +404,15 @@ if (! function_exists('phpb_redirect')) {
      *
      * @param string $url
      * @param array $flashData
+     * @param $statusCode
      */
-    function phpb_redirect($url, $flashData = [])
+    function phpb_redirect($url, $flashData = [], $statusCode = 302)
     {
         if (! empty($flashData)) {
             $_SESSION["phpb_flash"] = $flashData;
         }
 
-        header('Location: ' . $url);
+        header('Location: ' . $url, true, $statusCode);
         exit();
     }
 }
@@ -418,9 +462,8 @@ if (! function_exists('phpb_field_value')) {
         if (isset($instance)) {
             if (method_exists($instance, 'get')) {
                 return phpb_encode_or_null($instance->get($attribute));
-            } else {
-                return phpb_encode_or_null($instance->$attribute);
             }
+            return phpb_encode_or_null($instance->$attribute);
         }
         return null;
     }
@@ -486,6 +529,28 @@ if (! function_exists('phpb_instance')) {
     }
 }
 
+if (! function_exists('phpb_static')) {
+    /**
+     * Return a static reference of the given class as defined in config, or with the given namespace (which is potentially overridden and mapped to an alternative namespace).
+     *
+     * @param string $name          the name of the config main section in which the class path is defined
+     * @return object|string|null
+     */
+    function phpb_static(string $name)
+    {
+        if (phpb_config($name . '.class')) {
+            return phpb_config($name . '.class');
+        }
+        if (class_exists($name)) {
+            if (phpb_config('class_replacements.' . $name)) {
+                return phpb_config('class_replacements.' . $name);
+            }
+            return $name;
+        }
+        return null;
+    }
+}
+
 if (! function_exists('phpb_slug')) {
     /**
      * Create a slug (safe URL or path) of the given string.
@@ -498,9 +563,8 @@ if (! function_exists('phpb_slug')) {
     {
         if ($allowSlashes) {
             return strtolower(trim(preg_replace('/[^A-Za-z0-9-\/]+/', '-', $text)));
-        } else {
-            return strtolower(trim(preg_replace('/[^A-Za-z0-9-]+/', '-', $text)));
         }
+        return strtolower(trim(preg_replace('/[^A-Za-z0-9-]+/', '-', $text)));
     }
 }
 
@@ -528,5 +592,30 @@ if (! function_exists('phpb_autoload')) {
 
         // include class files starting in the src directory
         require __DIR__ . '/../' . $fileName;
+    }
+}
+
+if (! function_exists('phpb_registered_assets')) {
+    /**
+     * Render all manually registered assets.
+     *
+     * @param $location
+     * @return void
+     */
+    function phpb_registered_assets($location = 'header') {
+        $assets = ($location === 'header') ? Extensions::getHeaderAssets() : Extensions::getFooterAssets();
+
+        foreach ($assets as $asset) {
+            $attributes = '';
+            foreach ($asset['attributes'] as $key => $value) {
+                $attributes .= ' ' . $key . '="' . $value . '"';
+            }
+
+            if ($asset['type'] == 'style') {
+                echo '<link rel="stylesheet" href="' . $asset['src'] . '" ' . $attributes . '/>';
+            } else {
+                echo '<script type="text/javascript" src="' . $asset['src'] . '" ' . $attributes . '></script>';
+            }
+        }
     }
 }

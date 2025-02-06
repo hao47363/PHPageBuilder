@@ -23,12 +23,12 @@ class DatabasePageRouter implements RouterContract
     /**
      * @var array $routeParameters
      */
-    protected $routeParameters;
+    protected $routeParameters = [];
 
     /**
      * @var array $routeToPageTranslationIdMapping
      */
-    protected $routeToPageTranslationIdMapping;
+    protected $routeToPageTranslationIdMapping = [];
 
     /**
      * DatabasePageRouter constructor.
@@ -37,8 +37,6 @@ class DatabasePageRouter implements RouterContract
     {
         $this->pageRepository = new PageRepository;
         $this->pageTranslationRepository = new PageTranslationRepository;
-        $this->routeParameters = [];
-        $this->routeToPageTranslationIdMapping = [];
     }
 
     /**
@@ -51,6 +49,10 @@ class DatabasePageRouter implements RouterContract
     {
         // strip URL query parameters
         $url = explode('?', $url, 2)[0];
+        // remove trailing slash
+        $url = rtrim($url, '/');
+        // ensure we did not remove the root slash
+        $url = empty($url) ? '/' : $url;
         // split URL into segments using / as separator
         $urlSegments = explode('/', $url);
 
@@ -107,14 +109,24 @@ class DatabasePageRouter implements RouterContract
     public function routeOrderComparison($route1, $route2)
     {
         // routes with more segments should be evaluated first
-        if (sizeof($route1) > sizeof($route2)) {
+        if (count($route1) > count($route2)) {
             return -1;
         }
-        if (sizeof($route1) < sizeof($route2)) {
+        if (count($route1) < count($route2)) {
             return 1;
         }
 
-        // routes ending with a  wildcard should be evaluated last (after exact matches or named parameters)
+        // routes ending with (more) named parameters should be evaluated after exact matches, but before catch all
+        $namedParameterCountRoute1 = substr_count(implode('/', $route1), '{');
+        $namedParameterCountRoute2 = substr_count(implode('/', $route2), '{');
+        if ($namedParameterCountRoute1 < $namedParameterCountRoute2) {
+            return -1;
+        }
+        if ($namedParameterCountRoute1 > $namedParameterCountRoute2) {
+            return 1;
+        }
+
+        // routes ending with a wildcard should be evaluated last (after exact matches or named parameters)
         if (array_slice($route1, -1)[0] === '*') {
             return 1;
         }
@@ -152,9 +164,13 @@ class DatabasePageRouter implements RouterContract
      */
     protected function onRoute($urlSegments, $routeSegments)
     {
-        $routeParameters = [];
+        // URL does not match if segment counts don't match, except if the route ends with a *
+        if (count($urlSegments) !== count($routeSegments) && end($routeSegments) !== '*') {
+            return false;
+        }
 
         // try matching each route segment with the same level URL segment
+        $routeParameters = [];
         foreach ($routeSegments as $i => $routeSegment) {
             if (! isset($urlSegments[$i])) {
                 return false;

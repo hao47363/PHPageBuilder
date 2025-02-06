@@ -52,13 +52,23 @@ $pageTranslations = $page ? $page->getTranslations() : [];
                     </div>
 
                     <?php
-                    foreach (phpb_active_languages() as $languageCode => $languageTranslation):
+                    foreach (array_keys(phpb_active_languages()) as $languageCode):
                     ?>
                     <h5 class="pt-2"><?= phpb_trans('languages.' . $languageCode) ?></h5>
                     <div class="pt-2 pl-3 pr-3">
                         <div class="form-group required">
                             <label for="page-title"><?= phpb_trans('website-manager.page-title') ?></label>
                             <input type="text" class="form-control" id="page-title" name="title[<?= phpb_e($languageCode) ?>]" value="<?= phpb_e($pageTranslations[$languageCode]['title'] ?? '') ?>" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="page-meta-title"><?= phpb_trans('website-manager.page-meta-title') ?></label>
+                            <input type="text" class="form-control" id="page-meta-title" name="meta_title[<?= phpb_e($languageCode) ?>]" value="<?= phpb_e($pageTranslations[$languageCode]['meta_title'] ?? '') ?>">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="page-meta-description"><?= phpb_trans('website-manager.page-meta-description') ?></label>
+                            <input type="text" class="form-control" id="page-meta-description" name="meta_description[<?= phpb_e($languageCode) ?>]" value="<?= phpb_e($pageTranslations[$languageCode]['meta_description'] ?? '') ?>">
                         </div>
 
                         <div class="form-group required">

@@ -2,6 +2,15 @@ $(document).ready(function() {
 
     window.pageData = {};
 
+    window.changesOffset = 0;
+    window.onbeforeunload = confirmExit;
+    function confirmExit() {
+        let changesCount = window.editor.getModel().get('changesCount') - window.changesOffset;
+        if (changesCount > 0) {
+            return "Are you sure? There are unsaved changes.";
+        }
+    }
+
     /**
      * Save page on clicking save button.
      */
@@ -52,8 +61,12 @@ $(document).ready(function() {
                     window.pageBlocks[newLanguage] = response.dynamicBlocks ? response.dynamicBlocks : {};
                     callback();
                 },
-                error: function() {
+                error: function(error) {
                     callback();
+                    console.log(error);
+                    let errorMessage = error.statusText + ' ' + error.status;
+                    errorMessage = error.responseJSON.message ? (errorMessage + ': "' + error.responseJSON.message + '"') : errorMessage;
+                    window.toastr.error(errorMessage);
                     window.toastr.error(window.translations['toastr-switching-language-failed']);
                 }
             });
@@ -110,6 +123,9 @@ $(document).ready(function() {
             for (let subBlockId in currentLanguageBlocks[blockId].blocks) {
                 let updatedSubBlock = currentLanguageBlocks[blockId].blocks[subBlockId];
                 let oldSubBlock = newLanguageBlocks[blockId].blocks[subBlockId];
+                if (! updatedSubBlock || ! oldSubBlock) {
+                    continue;
+                }
 
                 let updatedSubBlockMatches = updatedSubBlock.html.match(/phpb-blocks-container(.*)>(.*)</g);
                 let oldSubBlockMatches = oldSubBlock.html.match(/phpb-blocks-container(.*)>(.*)</g);
@@ -133,6 +149,7 @@ $(document).ready(function() {
     function saveCurrentTranslationLocally(callback) {
         // use timeout to ensure the waiting spinner is fully displayed before the page briefly freezes due to high JS workload
         setTimeout(function() {
+            let existingCss = window.pageData['css'] ? window.pageData['css'] : window.initialCss;
             window.pageData = {
                 html: [],
                 components: [],
@@ -145,7 +162,7 @@ $(document).ready(function() {
             window.editor.getWrapper().find("[phpb-content-container]").forEach((container, index) => {
                 let data = getContainerContentInStorageFormat(container);
 
-                window.pageData['css'] = data.css;
+                window.pageData['css'] = mergeCss(existingCss, data.css);
                 window.pageData['style'] = data.style;
                 window.pageData['html'][index] = data.html;
                 window.pageData['components'][index] = data.components;
@@ -158,6 +175,83 @@ $(document).ready(function() {
                 callback();
             }
         }, 200);
+    }
+
+    /**
+     * Add all selectors from existingCss that are missing in newCss.
+     * Backwards compatibility fix: losing CSS due to having different block style identifiers for different languages.
+     */
+    function mergeCss(existingCss, newCss) {
+        if (! existingCss) {
+            return newCss;
+        }
+        let pageBlocksString = JSON.stringify(window.pageBlocks);
+        let regex = "\\.ID(.*?){(.*?)}"
+        let matches = existingCss.match(new RegExp(regex, 'g'));
+        if (! matches) {
+            return newCss;
+        }
+        matches.forEach(function(css) {
+            let selector = css.split('{')[0];
+            let pageBlocksStringSelector = selector.replace('.', ' ').trim();
+            if (newCss.indexOf(selector) === -1 && pageBlocksString.indexOf(pageBlocksStringSelector) >= 0) {
+                newCss += css;
+            }
+        });
+        return newCss;
+    }
+
+    /**
+     * Remove all page blocks that are never referred to.
+     */
+    function removeOldPageBlocks(pageBlocks) {
+        let htmlString = JSON.stringify(window.pageData.html);
+
+        let pageBlocksCleaned = {};
+        $.each(pageBlocks, (languageCode, languagePageBlocks) => {
+            let blockStrings = {};
+            $.each(languagePageBlocks, (blockId, blockData) => {
+                blockStrings[blockId] = JSON.stringify(blockData);
+            });
+
+            let filteredLanguagePageBlocks = {};
+            $.each(languagePageBlocks, (blockId, blockData) => {
+                if (htmlString.includes(blockId)) {
+                    filteredLanguagePageBlocks[blockId] = blockData;
+                    return true; // continue
+                }
+                $.each(blockStrings, (otherBlockId, otherBlockString) => {
+                    if (otherBlockString.includes(blockId)) {
+                        filteredLanguagePageBlocks[blockId] = blockData;
+                        return false; // break
+                    }
+                });
+            });
+            pageBlocksCleaned[languageCode] = filteredLanguagePageBlocks;
+        });
+        return pageBlocksCleaned;
+    }
+
+    /**
+     * Remove the style selectors that are no longer present among the current page blocks.
+     */
+    function removeOldStyleSelectors(pageBlocks, styleComponents) {
+        let pageBlocksString = JSON.stringify(pageBlocks);
+
+        // remove style components that are not used by any page block
+        let updatedStyleComponents = [];
+        styleComponents.forEach(styleComponent => {
+            if (styleComponent.attributes.selectors.models.length) {
+                if (Object.keys(styleComponent.attributes.style).length === 0) {
+                    return; // skip components with empty style
+                }
+                let selector = styleComponent.attributes.selectors.models[0].id;
+                if (pageBlocksString.includes(selector)) {
+                    updatedStyleComponents.push(styleComponent);
+                }
+            }
+        });
+        return updatedStyleComponents;
     }
 
     /**
@@ -176,8 +270,8 @@ $(document).ready(function() {
             });
 
             let data = window.pageData;
-            data.style = removeOldStyleSelectors(data.css, data.style);
-            data.blocks = window.pageBlocks;
+            data.blocks = removeOldPageBlocks(window.pageBlocks);
+            data.style = removeOldStyleSelectors(data.blocks, data.style);
 
             $.ajax({
                 type: "POST",
@@ -188,31 +282,21 @@ $(document).ready(function() {
                 success: function() {
                     toggleSaving();
                     window.toastr.success(window.translations['toastr-changes-saved']);
+
+                    setTimeout(function() {
+                        window.changesOffset = window.editor.getModel().get('changesCount');
+                    }, 250);
                 },
-                error: function() {
+                error: function(error) {
                     toggleSaving();
+                    console.log(error);
+                    let errorMessage = error.statusText + ' ' + error.status;
+                    errorMessage = error.responseJSON.message ? (errorMessage + ': "' + error.responseJSON.message + '"') : errorMessage;
+                    window.toastr.error(errorMessage);
                     window.toastr.error(window.translations['toastr-saving-failed']);
                 }
             });
         });
-    }
-
-    /**
-     * Remove the style selectors that are not present in the given CSS string.
-     */
-    function removeOldStyleSelectors(css, styleComponents) {
-        let updatedStyleComponents = [];
-
-        styleComponents.forEach(styleComponent => {
-            if (styleComponent.attributes.selectors.models.length) {
-                let selector = styleComponent.attributes.selectors.models[0].id;
-                if (css.includes(selector)) {
-                    updatedStyleComponents.push(styleComponent);
-                }
-            }
-        });
-
-        return updatedStyleComponents;
     }
 
     /**
