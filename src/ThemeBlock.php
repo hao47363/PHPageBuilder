@@ -12,7 +12,12 @@ class ThemeBlock
     /**
      * @var $config
      */
-    protected $config;
+    protected $config = [];
+
+    /**
+     * @var $dynamicConfig
+     */
+    public static $dynamicConfig = [];
 
     /**
      * @var ThemeContract $theme
@@ -25,23 +30,37 @@ class ThemeBlock
     protected $blockSlug;
 
     /**
+     * @var bool $isExtension
+     * Determines if a block was registered by an extension.
+     */
+    protected $isExtension;
+
+    /**
+     * @var bool $extensionSlug
+     * Custom slug in case of extension.
+     */
+    protected $extensionSlug;
+
+    /**
      * Theme constructor.
      *
      * @param ThemeContract $theme         the theme this block belongs to
      * @param string $blockSlug
+     * @param bool $isExtension
+     * @param string|null $extensionSlug
      */
-    public function __construct(ThemeContract $theme, string $blockSlug)
+    public function __construct(ThemeContract $theme, string $blockSlug, bool $isExtension = false, string $extensionSlug = null)
     {
         $this->theme = $theme;
         $this->blockSlug = $blockSlug;
-
-        $this->config = [];
+        $this->isExtension = $isExtension;
+        $this->extensionSlug = $extensionSlug;
         if (file_exists($this->getFolder() . '/config.php')) {
             $this->config = require $this->getFolder() . '/config.php';
         }
 
         PageRenderer::setCanBeCached(
-            boolval($this->config['cache'] ?? true),
+            (bool) ($this->config['cache'] ?? true),
             $this->config['cache_lifetime'] ?? null
         );
     }
@@ -53,6 +72,21 @@ class ThemeBlock
      */
     public function getFolder()
     {
+        if ($this->isExtension) {
+            return $this->blockSlug;
+        }
+        $folder = $this->theme->getFolder() . '/blocks/archived/' . basename($this->blockSlug);
+        if (file_exists($folder)) {
+            return $folder;
+        }
+        $folder = $this->theme->getFolder() . '/blocks/elements/' . basename($this->blockSlug);
+        if (file_exists($folder)) {
+            return $folder;
+        }
+        $folder = $this->theme->getFolder() . '/blocks/php/' . basename($this->blockSlug);
+        if (file_exists($folder)) {
+            return $folder;
+        }
         return $this->theme->getFolder() . '/blocks/' . basename($this->blockSlug);
     }
 
@@ -63,6 +97,17 @@ class ThemeBlock
      */
     protected function getNamespace()
     {
+        // return Namespace from the Config file of the Block if it is an extension. Used for Extensions.
+        if (isset( $this->config['namespace'])) {
+            return $this->config['namespace'];
+        }
+
+        // return Namespace from Config file if exists;
+        if (phpb_config('theme.namespace')) {
+            return phpb_config('theme.namespace');
+        }
+
+        // get namespace from directory structure if not provided:
         $themesPath = phpb_config('theme.folder');
         $themesFolderName = basename($themesPath);
         $blockFolder = $this->getFolder();
@@ -208,7 +253,7 @@ class ThemeBlock
      */
     public function getSlug()
     {
-        return $this->blockSlug;
+        return ($this->isExtension) ? $this->extensionSlug : $this->blockSlug;
     }
 
     /**
@@ -232,13 +277,24 @@ class ThemeBlock
     }
 
     /**
+     * The wrapper element to be used in the pagebuilder and for carrying style in case this block is a PHP block.
+     */
+    public function getWrapperElement()
+    {
+        return $this->config['wrapper'] ?? 'div';
+    }
+
+    /**
      * Return configuration with the given key (as dot-separated multidimensional array selector).
      *
      * @param $key
      * @return mixed
      */
-    public function get($key)
+    public function get($key = null)
     {
+        if (empty($key)) {
+            return $this->config;
+        }
         // if no dot notation is used, return first dimension value or empty string
         if (strpos($key, '.') === false) {
             return $this->config[$key] ?? null;
@@ -256,5 +312,52 @@ class ThemeBlock
         }
 
         return $subArray;
+    }
+
+    /**
+     * Replace configuration at the given key (as dot-separated multidimensional array selector) by the given value.
+     *
+     * @param $slug
+     * @param $key
+     * @param $value
+     * @return void
+     */
+    public static function set($slug, $key, $value)
+    {
+        if (empty($key)) {
+            self::$dynamicConfig[$slug] = $value;
+            return;
+        }
+        // if no dot notation is used, replace first dimension value or empty string
+        if (strpos($key, '.') === false) {
+            self::$dynamicConfig[$slug][$key] = $value;
+            return;
+        }
+
+        // if dot notation is used, traverse config and replace at the right depth
+        $segments = explode('.', $key);
+        $subArray = &self::$dynamicConfig[$slug];
+        foreach ($segments as $i => $segment) {
+            if (isset($subArray[$segment])) {
+                if ($i === count($segments) - 1) {
+                    $subArray[$segment] = $value;
+                } else {
+                    $subArray = &$subArray[$segment];
+                }
+            } else {
+                return;
+            }
+        }
+    }
+
+    /**
+     * Get all dynamic configuration of the block with the given slug.
+     *
+     * @param $slug
+     * @return mixed
+     */
+    public static function getDynamicConfig($slug)
+    {
+        return self::$dynamicConfig[$slug] ?? null;
     }
 }

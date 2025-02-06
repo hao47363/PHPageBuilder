@@ -1,5 +1,11 @@
+html, body {
+  overflow-x: initial !important;
+}
 form {
   margin-block-end: 0;
+}
+#wrapper {
+  overflow: hidden !important;
 }
 
 [data-cursor="default"] {
@@ -7,6 +13,9 @@ form {
 }
 [data-cursor="text"] {
   cursor: text;
+}
+span[draggable="true"] {
+  display: inline-flex;
 }
 [phpb-hide-if-not-editable] {
   background: #fde3c17d;
@@ -24,20 +33,20 @@ form {
 }
 
 [data-gjs-type].gjs-comp-selected {
-  outline: 2px solid #3b97e3 !important;
-  outline-offset: 1px !important;
+  outline: 1px solid #0091d1 !important;
+  outline-offset: 0 !important;
 }
 div[data-gjs-type].gjs-comp-selected {
-  outline: 2px solid #3b97e3 !important;
-  outline-offset: -2px !important;
+  outline: 1px solid #0091d1 !important;
+  outline-offset: -1px !important;
 }
 [phpb-content-container],
 [phpb-blocks-container] {
-  min-height: 100px;
+  min-height: 50px;
   width: 100%;
 }
 [phpb-blocks-container] {
-  border: 2px dashed #3b97e3;
+  border: 1px dashed #0091d1;
 }
 
 html,

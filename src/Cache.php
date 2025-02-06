@@ -6,7 +6,7 @@ use PHPageBuilder\Contracts\CacheContract;
 
 class Cache implements CacheContract
 {
-    public static $maxCacheDepth = 6;
+    public static $maxCacheDepth = 7;
     public static $maxCachedPageVariants = 50;
 
     /**
@@ -31,6 +31,24 @@ class Cache implements CacheContract
             }
 
             return file_get_contents($currentPageCacheFolder . '/page.html');
+        }
+        // do not load a skeleton page if the request is a skeleton replacement request
+        if (phpb_is_skeleton_data_request()) {
+            return null;
+        }
+        // do not load a skeleton page if the user agent does not support it (or disabled otherwise)
+        if ($_SESSION['phpb_no_skeletons'] ?? false) {
+            return null;
+        }
+        // check if a skeleton page is available for a part of the given URL
+        $depth = 0;
+        while ($relativeUrl !== '/' && $depth < 10) {
+            $depth++;
+            $relativeUrl = dirname($relativeUrl);
+            $currentPageCacheFolder = dirname($this->getPathForUrl($relativeUrl)) . "/skeleton-depth{$depth}";
+            if (is_dir($currentPageCacheFolder)) {
+                return $this->getForUrl($relativeUrl . "/skeleton-depth{$depth}");
+            }
         }
 
         return null;
@@ -91,7 +109,7 @@ class Cache implements CacheContract
     }
 
     /**
-     * Analyse the given cache path to determine whether it can be to used, without server/disk space issues.
+     * Analyse the given cache path to determine whether it can be used, without server/disk space issues.
      * This prevents deep nested cache paths and large numbers of cached pages per path due to query string variations.
      *
      * @param string $cachePath
@@ -99,21 +117,17 @@ class Cache implements CacheContract
      */
     public function cachePathCanBeUsed(string $cachePath): bool
     {
-        if (sizeof(explode('/', $cachePath)) > static::$maxCacheDepth) {
+        if (count(explode('/', $cachePath)) > static::$maxCacheDepth) {
             return false;
         }
 
         $cachePathWithoutHash = dirname($this->relativeToFullCachePath($cachePath));
         $numberOfCachedPageVariants = count(glob("{$cachePathWithoutHash}/*", GLOB_ONLYDIR));
-        if (is_dir($cachePathWithoutHash) && $numberOfCachedPageVariants >= static::$maxCachedPageVariants) {
-            return false;
-        }
-
-        return true;
+        return !(is_dir($cachePathWithoutHash) && $numberOfCachedPageVariants >= static::$maxCachedPageVariants);
     }
 
     /**
-     * Invalidate all variants stored for the given page route (i.e an URL with * and {} placeholders).
+     * Invalidate all variants stored for the given page route (i.e. a URL with * and {} placeholders).
      *
      * @param string $route
      */

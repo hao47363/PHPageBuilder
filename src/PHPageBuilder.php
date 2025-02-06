@@ -82,7 +82,12 @@ class PHPageBuilder
 
         // init the default page builder, active theme and page router
         $this->pageBuilder = phpb_instance('pagebuilder');
-        $this->theme = phpb_instance('theme', [phpb_config('theme'), phpb_config('theme.active_theme')]);
+
+        $this->theme = phpb_instance('theme', [
+            phpb_config('theme'), 
+            phpb_config('theme.active_theme')
+        ]);
+
         $this->router = phpb_instance('router');
 
         // load translations in the language that is currently active
@@ -113,6 +118,8 @@ class PHPageBuilder
         if (file_exists($themeTranslationsFolder . '/' . $language . '.php')) {
             $phpb_translations = array_merge($phpb_translations, require $themeTranslationsFolder . '/' . $language . '.php');
         }
+
+        $phpb_translations = phpb_instance(Translator::class)->customize($phpb_translations);
         return $phpb_translations;
     }
 
@@ -187,7 +194,7 @@ class PHPageBuilder
     public function setTheme(ThemeContract $theme)
     {
         $this->theme = $theme;
-        if (isset($this->pageBuilder)) {
+        if ($this->pageBuilder !== null) {
             $this->pageBuilder->setTheme($theme);
         }
     }
@@ -267,6 +274,7 @@ class PHPageBuilder
         if (phpb_in_module('website_manager')) {
             $this->auth->requireAuth();
             $this->websiteManager->handleRequest($route, $action);
+            header("HTTP/1.1 404 Not Found");
             die('PHPageBuilder WebsiteManager page not found');
         }
 
@@ -275,6 +283,7 @@ class PHPageBuilder
             $this->auth->requireAuth();
             phpb_set_in_editmode();
             $this->pageBuilder->handleRequest($route, $action);
+            header("HTTP/1.1 404 Not Found");
             die('PHPageBuilder PageBuilder page not found');
         }
 
@@ -288,6 +297,7 @@ class PHPageBuilder
             return true;
         }
 
+        header("HTTP/1.1 404 Not Found");
         die('PHPageBuilder page not found. Check your URL: <b>' . phpb_e(phpb_full_url(phpb_current_relative_url())) . '</b>');
     }
 
@@ -303,17 +313,24 @@ class PHPageBuilder
         // allowing direct /uploads access via .htaccess is preferred since it gives faster loading time)
         if (strpos(phpb_current_relative_url(), phpb_config('general.uploads_url') . '/') === 0) {
             $this->handleUploadedFileRequest();
-            die('File not found');
+            header("HTTP/1.1 404 Not Found");
+            exit();
         }
         // if we are on the URL of a PHPageBuilder asset, return the asset
         if (strpos(phpb_current_relative_url(), phpb_config('general.assets_url') . '/') === 0) {
             $this->handlePageBuilderAssetRequest();
-            die('Asset not found');
+            header("HTTP/1.1 404 Not Found");
+            exit();
         }
 
         // try to find page in cache
         $cache = phpb_instance('cache');
-        if (phpb_config('cache.enabled') && ! isset($_GET['ignore_cache']) && ! isset($_GET['refresh_cache'])) {
+        if (phpb_config('cache.enabled') &&
+            ! isset($_GET['ignore_cache']) &&
+            ! isset($_GET['refresh_cache']) &&
+            ! isset($_COOKIE['ignore_cache']) &&
+            PageRenderer::canBeCached()
+        ) {
             $cachedContent = $cache->getForUrl(phpb_current_relative_url());
             if ($cachedContent) {
                 echo $cachedContent;
@@ -322,11 +339,29 @@ class PHPageBuilder
         }
 
         // let the page router resolve the current URL
-        $pageTranslation = $this->router->resolve(phpb_current_relative_url());
-        if ($pageTranslation instanceof PageTranslationContract) {
+        $page = null;
+        $pageTranslation = $this->resolvePageLanguageVariantFromUrl(phpb_current_relative_url());
+        if ($pageTranslation !== null) {
             $page = $pageTranslation->getPage();
+        }
+        // if the URL cannot be resolved, but the lowercase version of the URL can be resolved, redirect to the lowercase URL
+        if (($page->logic ?? '') === 'page-not-found' && phpb_current_relative_url() !== strtolower(phpb_current_relative_url())) {
+            $pageLowerCaseUrlTranslation = $this->resolvePageLanguageVariantFromUrl(strtolower(phpb_current_relative_url()));
+            if ($pageLowerCaseUrlTranslation !== null) {
+                $pageLowerCaseUrl = $pageLowerCaseUrlTranslation->getPage();
+                if (($pageLowerCaseUrl->logic ?? '') !== 'page-not-found') {
+                    header("HTTP/1.1 301 Moved Permanently");
+                    header("Location: " . strtolower(phpb_current_relative_url()));
+                    exit();
+                }
+            }
+        }
+        // render page if resolved
+        if ($page !== null) {
             $renderedContent = $this->pageBuilder->renderPage($page, $pageTranslation->locale);
-            $this->cacheRenderedPage($renderedContent);
+            if (strpos($pageTranslation->route, '/*') === false) {
+                $this->cacheRenderedPage($renderedContent);
+            }
             echo $renderedContent;
             return true;
         }
@@ -334,24 +369,44 @@ class PHPageBuilder
     }
 
     /**
+     * Resolve a PageTranslation from the given URL.
+     *
+     * @param $url
+     * @return PageTranslationContract|null
+     */
+    protected function resolvePageLanguageVariantFromUrl($url)
+    {
+        return $this->router->resolve($url);
+    }
+
+    /**
      * Cache the rendered page contents, if caching is enabled and the current page does not contain non-cacheable blocks.
      *
      * @param string $renderedContent
+     * @param $language
+     * @return void
      */
-    protected function cacheRenderedPage(string $renderedContent)
+    public function cacheRenderedPage(string $renderedContent, $language = null)
     {
         if (! phpb_config('cache.enabled') || ! PageRenderer::canBeCached() || isset($_GET['ignore_cache'])) {
             return;
         }
+        $cache = phpb_instance('cache');
 
         // allow a forced cached page refresh, stored for the current URL but without the refresh parameter
         $url = phpb_current_relative_url();
         $url = str_replace('?refresh_cache&', '?', $url);
         $url = str_replace('?refresh_cache', '', $url);
         $url = str_replace('&refresh_cache', '', $url);
+        if ($language && strpos($url, '/' . $language . '/') !== 0) {
+            $cache->invalidate($url);
+            $url = '/' . $language . $url;
+        }
 
-        $cache = phpb_instance('cache');
-        $cache->storeForUrl($url, $renderedContent, PageRenderer::getCacheLifetime());
+        if (! empty(PageRenderer::$skeletonCacheUrl)) {
+            $url = PageRenderer::$skeletonCacheUrl;
+        }
+        $cache->storeForUrl($url, $renderedContent, phpb_static(PageRenderer::class)::getCacheLifetime());
     }
 
     /**
@@ -368,14 +423,16 @@ class PHPageBuilder
         // handle website manager requests
         if (phpb_config('website_manager.use_website_manager') && phpb_in_module('website_manager')) {
             $this->websiteManager->handleRequest($route, $action);
-            die('Page not found');
+            header("HTTP/1.1 404 Not Found");
+            exit();
         }
 
         // handle page builder requests
         if (phpb_in_module('pagebuilder')) {
             phpb_set_in_editmode();
             $this->pageBuilder->handleRequest($route, $action);
-            die('Page not found');
+            header("HTTP/1.1 404 Not Found");
+            exit();
         }
     }
 
@@ -388,17 +445,26 @@ class PHPageBuilder
         $file = substr(phpb_current_relative_url(), strlen(phpb_config('general.uploads_url')) + 1);
         // $file is in the format {file id}/{file name}.{file extension}, so get file id as the part before /
         $fileId = explode('/', $file)[0];
-        if (empty($fileId)) die('File not found');
+        if (empty($fileId)) {
+            header("HTTP/1.1 404 Not Found");
+            exit();
+        }
 
         $uploadRepository = new UploadRepository;
         $uploadedFile = $uploadRepository->findWhere('public_id', $fileId);
-        if (! $uploadedFile) die('File not found');
+        if (empty($uploadedFile)) {
+            header("HTTP/1.1 404 Not Found");
+            exit();
+        }
 
         $uploadedFile = $uploadedFile[0];
         $serverFile = realpath(phpb_config('storage.uploads_folder') . '/' . $uploadedFile->server_file);
         // add backwards compatibility for files uploaded with PHPageBuilder <= v0.12.0, stored as /uploads/{id}.{extension}
         if (! $serverFile) $serverFile = realpath(phpb_config('storage.uploads_folder') . '/' . basename($uploadedFile->server_file));
-        if (! $serverFile) die('File not found');
+        if (! $serverFile) {
+            header("HTTP/1.1 404 Not Found");
+            exit();
+        }
 
         header('Content-Type: ' . $uploadedFile->mime_type);
         header('Content-Disposition: inline; filename="' . basename($uploadedFile->original_file) . '"');
@@ -417,23 +483,34 @@ class PHPageBuilder
     {
         // get asset file path by stripping the configured assets_url prefix from the current request URI
         $asset = substr(phpb_current_relative_url(), strlen(phpb_config('general.assets_url')) + 1);
+        $asset = explode('?', $asset)[0];
 
         $distPath = realpath(__DIR__ . '/../dist/');
         $requestedFile = realpath($distPath . '/' . $asset);
-        if (! $requestedFile) die('Asset not found');
+        if (! $requestedFile) {
+            header("HTTP/1.1 404 Not Found");
+            exit();
+        }
 
         // prevent path traversal by ensuring the requested file is inside the dist folder
-        if (strpos($requestedFile, $distPath) !== 0) die('Asset not found');
+        if (strpos($requestedFile, $distPath) !== 0) {
+            header("HTTP/1.1 404 Not Found");
+            exit();
+        }
 
         // only allow specific extensions
         $ext = pathinfo($requestedFile, PATHINFO_EXTENSION);
-        if (! in_array($ext, ['js', 'css', 'jpg', 'png'])) die('Asset not found');
+        if (! in_array($ext, ['js', 'css', 'jpg', 'png', 'svg'])) {
+            header("HTTP/1.1 404 Not Found");
+            exit();
+        }
 
         $contentTypes = [
             'js' => 'application/javascript; charset=utf-8',
             'css' => 'text/css; charset=utf-8',
             'png' => 'image/png',
-            'jpg' => 'image/jpeg'
+            'jpg' => 'image/jpeg',
+            'svg' => 'image/svg+xml'
         ];
         header('Content-Type: ' . $contentTypes[$ext]);
         header('Content-Disposition: inline; filename="' . basename($requestedFile) . '"');

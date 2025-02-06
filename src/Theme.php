@@ -33,10 +33,79 @@ class Theme implements ThemeContract
      * @param array $config
      * @param string $themeSlug
      */
+
     public function __construct(array $config, string $themeSlug)
     {
         $this->config = $config;
         $this->themeSlug = $themeSlug;
+    }
+
+    /**
+     * Load a single block entry
+     */
+
+    protected function attemptBlockRegistration($entry) {
+        if ($entry->isDir() && ! $entry->isDot()) {
+            $blockSlug = $entry->getFilename();
+            $block = new ThemeBlock($this, $blockSlug);
+
+            $isActive = true;
+            foreach (($block->get('whitelist') ?? []) as $whitelistDomain) {
+                $isActive = false;
+                if (strpos(phpb_current_full_url(), $whitelistDomain) !== false) {
+                    $isActive = true;
+                    break;
+                }
+            }
+
+            if ($isActive) {
+                $this->blocks[$blockSlug] = $block;
+            }
+        }
+    }
+
+    /**
+     * Load a single extension block entry
+     */
+
+    protected function attemptExtensionBlockRegistration($slug, $path) {
+        if ($slug && $path) {
+            $block = new ThemeBlock($this, $path, true, $slug);
+
+            $isActive = true;
+            foreach (($block->get('whitelist') ?? []) as $whitelistDomain) {
+                $isActive = false;
+                if (strpos(phpb_current_full_url(), $whitelistDomain) !== false) {
+                    $isActive = true;
+                    break;
+                }
+            }
+
+            if ($isActive) {
+                $this->blocks[$slug] = $block;
+            }
+        }
+    }
+
+    /**
+     * Load a single layout entry
+     */
+
+    protected function attemptLayoutRegistration($entry) {
+        if ($entry->isDir() && ! $entry->isDot()) {
+            $layoutSlug = $entry->getFilename();
+            $layout = new ThemeLayout($this, $layoutSlug);
+            $this->layouts[$layoutSlug] = $layout;
+        }
+    }
+
+    /**
+     * Load a single layout entry
+     */
+
+    protected function attemptExtensionLayoutRegistration($slug, $path) {
+        $layout = new ThemeLayout($this, $path, true, $slug);
+        $this->layouts[$slug] = $layout;
     }
 
     /**
@@ -46,17 +115,27 @@ class Theme implements ThemeContract
     {
         $this->blocks = [];
 
-        if (! file_exists($this->getFolder() . '/blocks')) {
-            return;
+        $folders = [
+            '',
+            '/archived',
+            '/elements',
+            '/php',
+        ];
+        foreach ($folders as $folder) {
+            if (file_exists($this->getFolder() . '/blocks' . $folder)) {
+                $blocksDirectory = new DirectoryIterator($this->getFolder() . '/blocks' . $folder);
+                foreach ($blocksDirectory as $entry) {
+                    // skip special subfolders containing blocks
+                    if (in_array('/' . $entry, $folders)) {
+                        continue;
+                    }
+                    $this->attemptBlockRegistration($entry);
+                }
+            }
         }
 
-        $blocksDirectory = new DirectoryIterator($this->getFolder() . '/blocks');
-        foreach ($blocksDirectory as $entry) {
-            if ($entry->isDir() && ! $entry->isDot()) {
-                $blockSlug = $entry->getFilename();
-                $block = new ThemeBlock($this, $blockSlug);
-                $this->blocks[$blockSlug] = $block;
-            }
+        foreach (Extensions::getBlocks() as $slug => $path) {
+            $this->attemptExtensionBlockRegistration($slug, $path);
         }
     }
 
@@ -67,17 +146,15 @@ class Theme implements ThemeContract
     {
         $this->layouts = [];
 
-        if (! file_exists($this->getFolder() . '/layouts')) {
-            return;
+        if (file_exists($this->getFolder() . '/layouts')) {
+            $layoutsDirectory = new DirectoryIterator($this->getFolder() . '/layouts');
+            foreach ($layoutsDirectory as $entry) {
+                $this->attemptLayoutRegistration($entry);
+            }
         }
 
-        $layoutsDirectory = new DirectoryIterator($this->getFolder() . '/layouts');
-        foreach ($layoutsDirectory as $entry) {
-            if ($entry->isDir() && ! $entry->isDot()) {
-                $layoutSlug = $entry->getFilename();
-                $layout = new ThemeLayout($this, $layoutSlug);
-                $this->layouts[$layoutSlug] = $layout;
-            }
+        foreach (Extensions::getLayouts() as $slug => $path) {
+            $this->attemptExtensionLayoutRegistration($slug, $path);
         }
     }
 

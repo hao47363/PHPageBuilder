@@ -11,8 +11,24 @@
             let lastChild = component.components().models[component.components().length - 1];
             if (lastChild.attributes.type === 'script') {
                 let blockId = component.attributes.attributes['block-id'];
-                window.customBuilderScripts[blockId] = lastChild.toHTML();
-                lastChild.remove();
+                if (blockId === undefined) {
+                    blockId = component.attributes.attributes['id'];
+                }
+
+                let rootComponent = lastChild;
+                let insideEditablePartOfPage = false;
+                while (rootComponent.parent()) {
+                    rootComponent = rootComponent.parent();
+                    if (rootComponent.attributes.attributes['phpb-content-container']) {
+                        insideEditablePartOfPage = true;
+                        break;
+                    }
+                }
+
+                if (insideEditablePartOfPage) {
+                    window.customBuilderScripts[blockId] = lastChild.toHTML();
+                    lastChild.remove();
+                }
             }
         }
     });
@@ -21,7 +37,7 @@
      * After mounting the component in the canvas.
      */
     window.editor.on('component:add', function (component) {
-        // run the script that was set when creating this component (for example while an existing component)
+        // run the script that was set when creating this component
         if (component.attributes['run-builder-script'] !== undefined) {
             let originalCustomBuilderScripts = customBuilderScripts;
 
@@ -30,6 +46,20 @@
 
             window.customBuilderScripts = originalCustomBuilderScripts;
             delete component.attributes['run-builder-script'];
+        }
+    });
+
+    /**
+     * On ending a component order drag, re-run builder scripts on newly added HTMl.
+     */
+    window.editor.on('sorter:drag:end', function(event) {
+        let component = event.modelToDrop;
+        if (component && component.attributes && (component.attributes['block-id'] || component.attributes['id'])) {
+            window.runScriptsOfComponentAndChildren(component);
+        }
+        // remove all existing CKEditors after dragging a block with active editor
+        for (let instanceName in CKEDITOR.instances) {
+            CKEDITOR.instances[instanceName].destroy(true);
         }
     });
 
@@ -52,6 +82,9 @@
      */
     function runComponentScript(component) {
         let blockId = component.attributes['block-id'];
+        if (blockId === undefined) {
+            blockId = component.attributes.attributes['id'];
+        }
         if (blockId && window.customBuilderScripts[blockId] !== undefined) {
             let styleIdentifier = component.attributes["style-identifier"];
             let $scriptTag = $("<container>").append(window.customBuilderScripts[blockId]);

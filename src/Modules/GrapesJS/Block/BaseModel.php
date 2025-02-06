@@ -28,6 +28,21 @@ class BaseModel
     protected $forPageBuilder;
 
     /**
+     * @var bool $doNotRender
+     */
+    protected $doNotRender;
+
+    /**
+     * @var bool $hasSkeleton
+     */
+    protected $hasSkeleton;
+
+    /**
+     * @var bool $hasDynamicSkeleton
+     */
+    protected $hasDynamicSkeleton;
+
+    /**
      * BaseModel constructor.
      *
      * @param ThemeBlock $block
@@ -94,6 +109,36 @@ class BaseModel
     public function childData($childBlockId)
     {
         return $this->data['blocks'][$childBlockId] ?? null;
+    }
+
+    /**
+     * Whether this page is rendered on the webpage.
+     *
+     * @return false
+     */
+    public function doNotRender(): bool
+    {
+        return $this->doNotRender ?? false;
+    }
+
+    /**
+     * Whether this block has skeleton loading.
+     *
+     * @return false
+     */
+    public function hasSkeleton(): bool
+    {
+        return $this->hasSkeleton ?? false;
+    }
+
+    /**
+     * Whether this block has dynamic skeleton loading (i.e. partially rendered, but needs to be replaced).
+     *
+     * @return false
+     */
+    public function hasDynamicSkeleton(): bool
+    {
+        return $this->hasDynamicSkeleton ?? false;
     }
 
 }

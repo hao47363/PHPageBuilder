@@ -2,7 +2,6 @@
 
 namespace PHPageBuilder\Modules\GrapesJS;
 
-use Illuminate\Support\Facades\Storage;
 use PHPageBuilder\Contracts\PageBuilderContract;
 use PHPageBuilder\Contracts\PageContract;
 use PHPageBuilder\Contracts\ThemeContract;
@@ -12,7 +11,6 @@ use PHPageBuilder\Modules\GrapesJS\Upload\Uploader;
 use PHPageBuilder\Repositories\PageRepository;
 use PHPageBuilder\Repositories\UploadRepository;
 use Exception;
-use PHPageBuilder\Theme;
 
 class PageBuilder implements PageBuilderContract
 {
@@ -27,6 +25,11 @@ class PageBuilder implements PageBuilderContract
     protected $scripts = [];
 
     /**
+     * @var array $pages
+     */
+    protected $pages = [];
+
+    /**
      * @var string $css
      */
     protected $css;
@@ -36,7 +39,10 @@ class PageBuilder implements PageBuilderContract
      */
     public function __construct()
     {
-        $this->theme = phpb_instance('theme', [phpb_config('theme'), phpb_config('theme.active_theme')]);
+        $this->theme = phpb_instance('theme', [
+            phpb_config('theme'),
+            phpb_config('theme.active_theme')
+        ]);
     }
 
     /**
@@ -47,51 +53,6 @@ class PageBuilder implements PageBuilderContract
     public function setTheme(ThemeContract $theme)
     {
         $this->theme = $theme;
-    }
-
-    public function saveAllAsHtml($page, $passed_domain, $status)
-    {
-        // TODO: not sure if there is any cascade effect, but this seems unnecessary
-        // $pageObj = (new PageRepository)->findWithId($page->getId());
-        $translations = $page->getTranslations();
-        $domains = phpb_config('domains');
-
-        foreach ($translations as $transKey => $transVal) {
-            foreach ($domains as $domainKey => $domainValue) {
-                $this->saveAsHtml($page, $transKey, $domainValue, $domainKey, $passed_domain, $status);
-            }
-        }
-    }
-
-    public function forceFilePutContents(string $fullPathWithFileName, string $fileContents)
-    {
-        $exploded = explode(DIRECTORY_SEPARATOR, $fullPathWithFileName);
-
-        array_pop($exploded);
-
-        $directoryPathOnly = implode(DIRECTORY_SEPARATOR, $exploded);
-
-        if (!file_exists($directoryPathOnly)) {
-            mkdir($directoryPathOnly, 0775, true);
-        }
-        file_put_contents($fullPathWithFileName, $fileContents);
-    }
-
-    public function saveAsHtml($page, $currentLanguage, $layout, $domain, $passed_domain, $status)
-    {
-        $theme = new Theme(phpb_config('theme'), phpb_config('theme.active_theme'));
-        $page->layout = $layout;
-        $pageRenderer = new PageRenderer($theme, $page);
-        $pageRenderer->setLanguage($currentLanguage);
-        $html = $pageRenderer->render();
-        // TODO: the root could be changed if it is not served through laravel
-        if ($passed_domain !== null && $domain === $passed_domain) {
-            if ($status === true) {
-                $this->forceFilePutContents(phpb_config('folders.staging') . '/' . $domain . '/' . $currentLanguage . '/' . $page->getRoute() . '_' . date('Y_m_d_His') . '.html', $html);
-                $this->forceFilePutContents(phpb_config('folders.production') . '/' . $domain . '/' . $currentLanguage . '/' . $page->getRoute() . '.html', $html);
-            }
-            $this->forceFilePutContents(phpb_config('folders.staging') . '/' . $domain . '/' . $currentLanguage . '/' . $page->getRoute() . '.html', $html);
-        }
     }
 
     /**
@@ -117,7 +78,7 @@ class PageBuilder implements PageBuilderContract
             $pageRepository = new PageRepository;
             $page = $pageRepository->findWithId($pageId);
         }
-        if (!($page instanceof PageContract)) {
+        if (! ($page instanceof PageContract)) {
             return false;
         }
 
@@ -126,12 +87,10 @@ class PageBuilder implements PageBuilderContract
             case 'edit':
                 $this->renderPageBuilder($page);
                 exit();
-                break;
             case 'store':
                 if (isset($_POST) && isset($_POST['data'])) {
                     $data = json_decode($_POST['data'], true);
                     $this->updatePage($page, $data);
-                    $this->saveAllAsHtml($page);
                     exit();
                 }
                 break;
@@ -170,36 +129,35 @@ class PageBuilder implements PageBuilderContract
     public function handleFileUpload()
     {
         $publicId = sha1(uniqid(rand(), true));
-        $uploader = new Uploader('files');
+        $uploader = phpb_instance(Uploader::class, ['files']);
         $uploader
             ->file_name($publicId . '/' . str_replace(' ', '-', $uploader->file_src_name))
             ->upload_to(phpb_config('storage.uploads_folder') . '/')
             ->run();
 
-        if (!$uploader->was_uploaded) {
+        if (! $uploader->was_uploaded) {
             die("Upload error: {$uploader->error}");
-        } else {
-            $originalFile = str_replace(' ', '-', $uploader->file_src_name);
-            $originalMime = $uploader->file_src_mime;
-            $serverFile = $uploader->final_file_name;
-
-            $uploadRepository = new UploadRepository;
-            $uploadedFile = $uploadRepository->create([
-                'public_id' => $publicId,
-                'original_file' => $originalFile,
-                'mime_type' => $originalMime,
-                'server_file' => $serverFile
-            ]);
-
-            echo json_encode([
-                'data' => [
-                    'public_id' => $publicId,
-                    'src' => $uploadedFile->getUrl(),
-                    'type' => 'image'
-                ]
-            ]);
-            exit();
         }
+        $originalFile = str_replace(' ', '-', $uploader->file_src_name);
+        $originalMime = $uploader->file_src_mime;
+        $serverFile = $uploader->final_file_name;
+
+        $uploadRepository = new UploadRepository;
+        $uploadedFile = $uploadRepository->create([
+            'public_id' => $publicId,
+            'original_file' => $originalFile,
+            'mime_type' => $originalMime,
+            'server_file' => $serverFile
+        ]);
+
+        echo json_encode([
+            'data' => [
+                'public_id' => $publicId,
+                'src' => $uploadedFile->getUrl(),
+                'type' => 'image'
+            ]
+        ]);
+        exit();
     }
 
     /**
@@ -249,6 +207,9 @@ class PageBuilder implements PageBuilderContract
         // init variables that should be accessible in the view
         $pageBuilder = $this;
         $pageRenderer = phpb_instance(PageRenderer::class, [$this->theme, $page, true]);
+        if (! empty($_SESSION['phpagebuilder_language'])) {
+            $pageRenderer->setLanguage($_SESSION['phpagebuilder_language']);
+        }
 
         // create an array of theme blocks and theme block settings for in the page builder sidebar
         $blocks = [];
@@ -256,11 +217,10 @@ class PageBuilder implements PageBuilderContract
         foreach ($this->theme->getThemeBlocks() as $themeBlock) {
             $slug = phpb_e($themeBlock->getSlug());
             $adapter = phpb_instance(BlockAdapter::class, [$pageRenderer, $themeBlock]);
-            $blockSettings[$slug] = $adapter->getBlockSettingsArray();
-
             if ($themeBlock->get('hidden') !== true) {
                 $blocks[$slug] = $adapter->getBlockManagerArray();
             }
+            $blockSettings[$slug] = $adapter->getBlockSettingsArray();
         }
 
         // create an array of all uploaded assets
@@ -285,7 +245,7 @@ class PageBuilder implements PageBuilderContract
     public function renderPage(PageContract $page, $language = null): string
     {
         $pageRenderer = phpb_instance(PageRenderer::class, [$this->theme, $page]);
-        if (!is_null($language)) {
+        if (! is_null($language)) {
             $pageRenderer->setLanguage($language);
         }
         return $pageRenderer->render();
@@ -322,6 +282,7 @@ class PageBuilder implements PageBuilderContract
     public function renderLanguageVariant(PageContract $page, string $language, $blockData = [])
     {
         phpb_set_in_editmode();
+        $_SESSION['phpagebuilder_language'] = $language;
 
         $blockData = is_array($blockData) ? $blockData : [];
         $page->setData(['data' => $blockData], false);
@@ -347,14 +308,27 @@ class PageBuilder implements PageBuilderContract
     }
 
     /**
+     * Set the list of all pages.
+     *
+     * @param $pages
+     */
+    public function setPages($pages)
+    {
+        $this->pages = $pages;
+    }
+
+    /**
      * Return the list of all pages, used in CKEditor link editor.
      *
      * @return array
      */
     public function getPages()
     {
-        $pages = [];
+        if (! empty($this->pages)) {
+            return $this->pages;
+        }
 
+        $pages = [];
         $pageRepository = new PageRepository;
         foreach ($pageRepository->getAll() as $page) {
             $pages[] = [
@@ -362,7 +336,7 @@ class PageBuilder implements PageBuilderContract
                 phpb_e($page->getId())
             ];
         }
-
+        $this->pages = $pages;
         return $pages;
     }
 
@@ -377,8 +351,8 @@ class PageBuilder implements PageBuilderContract
         $data = $page->getBuilderData();
         $components = $data['components'] ?? [0 => []];
         // backwards compatibility, components are now stored for each main container (@todo: remove this at the first mayor version)
-        if (isset($components[0]) && !empty($components[0]) && !isset($components[0][0])) {
-            $components = [0 => $components];
+        if (isset($components[0]) && ! empty($components[0]) && ! isset($components[0][0])) {
+            return [0 => $components];
         }
         return $components;
     }
@@ -399,6 +373,21 @@ class PageBuilder implements PageBuilderContract
     }
 
     /**
+     * Return this page's css in the format passed to GrapesJS.
+     *
+     * @param PageContract $page
+     * @return string
+     */
+    public function getPageStyleCss(PageContract $page)
+    {
+        $data = $page->getBuilderData();
+        if (isset($data['css'])) {
+            return $data['css'];
+        }
+        return '';
+    }
+
+    /**
      * Get or set custom css for customizing layout of the page builder.
      *
      * @param string|null $css
@@ -406,7 +395,7 @@ class PageBuilder implements PageBuilderContract
      */
     public function customStyle(string $css = null)
     {
-        if (!is_null($css)) {
+        if (! is_null($css)) {
             $this->css = $css;
         }
         return $this->css;
@@ -415,13 +404,13 @@ class PageBuilder implements PageBuilderContract
     /**
      * Get or set custom scripts for customizing behaviour of the page builder.
      *
-     * @param string $location head|body
+     * @param string $location              head|body
      * @param string|null $scripts
      * @return string
      */
     public function customScripts(string $location, string $scripts = null)
     {
-        if (!is_null($scripts)) {
+        if (! is_null($scripts)) {
             $this->scripts[$location] = $scripts;
         }
         return $this->scripts[$location] ?? '';

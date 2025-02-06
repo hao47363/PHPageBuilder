@@ -72,13 +72,14 @@ class PageRepository extends BaseRepository implements PageRepositoryContract
             }
         }
 
-        $page->invalidateCache();
         $this->replaceTranslations($page, $data);
 
-        return parent::update($page, [
+        $updateResult = parent::update($page, [
             'name' => $data['name'],
             'layout' => $data['layout'],
         ]);
+        $page->invalidateCache();
+        return $updateResult;
     }
 
     /**
@@ -86,11 +87,12 @@ class PageRepository extends BaseRepository implements PageRepositoryContract
      *
      * @param PageContract $page
      * @param array $data
+     * @return bool
      */
     protected function replaceTranslations(PageContract $page, array $data)
     {
         $activeLanguages = phpb_active_languages();
-        foreach (['title', 'route'] as $field) {
+        foreach (['title', 'meta_title', 'meta_description', 'route'] as $field) {
             foreach ($activeLanguages as $languageCode => $languageTranslation) {
                 if (! isset($data[$field][$languageCode])) {
                     return false;
@@ -105,15 +107,17 @@ class PageRepository extends BaseRepository implements PageRepositoryContract
                 phpb_config('page.translation.foreign_key') => $page->getId(),
                 'locale' => $languageCode,
                 'title' => $data['title'][$languageCode],
+                'meta_title' => $data['meta_title'][$languageCode],
+                'meta_description' => $data['meta_description'][$languageCode],
                 'route' => $data['route'][$languageCode],
             ]);
         }
 
-        return $page;
+        return true;
     }
 
     /**
-     * Update the given page with the given updated page data
+     * Update the given page with the given updated page data.
      *
      * @param $page
      * @param array $data
@@ -121,11 +125,11 @@ class PageRepository extends BaseRepository implements PageRepositoryContract
      */
     public function updatePageData($page, array $data)
     {
-        $page->invalidateCache();
-
-        return parent::update($page, [
-            'data' => json_encode($data, JSON_UNESCAPED_UNICODE),
+        $updateResult = parent::update($page, [
+            'data' => json_encode($data),
         ]);
+        $page->invalidateCache();
+        return $updateResult;
     }
 
     /**

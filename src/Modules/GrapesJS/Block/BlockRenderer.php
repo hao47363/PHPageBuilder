@@ -4,6 +4,7 @@ namespace PHPageBuilder\Modules\GrapesJS\Block;
 
 use PHPageBuilder\Contracts\PageContract;
 use PHPageBuilder\Contracts\ThemeContract;
+use PHPageBuilder\Extensions;
 use PHPageBuilder\ThemeBlock;
 
 class BlockRenderer
@@ -38,6 +39,28 @@ class BlockRenderer
     }
 
     /**
+     * Change this BlockRenderer to render not editable blocks.
+     *
+     * @return $this
+     */
+    public function notEditable()
+    {
+        $this->forPageBuilder = false;
+        return $this;
+    }
+
+    /**
+     * Change this BlockRenderer to render editable blocks.
+     *
+     * @return $this
+     */
+    public function editable()
+    {
+        $this->forPageBuilder = true;
+        return $this;
+    }
+
+    /**
      * Render a theme block with the given slug using the given block data.
      *
      * @param string $blockSlug
@@ -47,7 +70,10 @@ class BlockRenderer
      */
     public function renderWithSlug(string $blockSlug, $blockData = null, $id = null)
     {
-        $block = new ThemeBlock($this->theme, $blockSlug);
+        $block = ($path = Extensions::getBlock($blockSlug)) 
+                    ? new ThemeBlock($this->theme, $path, true, $blockSlug) 
+                    : new ThemeBlock($this->theme, $blockSlug);
+
         return $this->render($block, $blockData, $id);
     }
 
@@ -69,20 +95,19 @@ class BlockRenderer
             $html = $this->renderDynamicBlock($themeBlock, $blockData);
         }
 
+        $wrapperElement = $themeBlock->getWrapperElement();
         if ($this->forPageBuilder) {
             $id = $id ?? $themeBlock->getSlug();
-            $html = '<phpb-block block-slug="' . phpb_e($themeBlock->getSlug()) . '" block-id="' . phpb_e($id) . '" is-html="' . ($themeBlock->isHtmlBlock() ? 'true' : 'false') . '">'
+            $html = '<phpb-block block-slug="' . phpb_e($themeBlock->getSlug()) . '" block-id="' . phpb_e($id) . '" wrapper="' . $wrapperElement .'" is-html="' . ($themeBlock->isHtmlBlock() ? 'true' : 'false') . '">'
                 . $html . $this->renderBuilderScript($themeBlock)
                 . '</phpb-block>';
+        } elseif (! $themeBlock->isHtmlBlock() && isset($blockData['settings']['attributes']['style-identifier'])) {
+            // add wrapper element around dynamic pagebuilder blocks, which receives the style identifier class if additional styling is added to the block via the pagebuilder
+            $html = '<' . $wrapperElement . ' class="' . phpb_e($blockData['settings']['attributes']['style-identifier']) . '">'
+                . $html . $this->renderScript($themeBlock)
+                . '</' . $wrapperElement . '>';
         } else {
-            if (! $themeBlock->isHtmlBlock() && isset($blockData['settings']['attributes']['style-identifier'])) {
-                // add wrapper div around pagebuilder blocks, which receives the style identifier class if additional styling is added to the block via the pagebuilder
-                $html = '<div class="' . phpb_e($blockData['settings']['attributes']['style-identifier']) . '">'
-                    . $html . $this->renderScript($themeBlock)
-                    . '</div>';
-            } else {
-                $html .= $this->renderScript($themeBlock);
-            }
+            $html .= $this->renderScript($themeBlock);
         }
         return $html;
     }
@@ -134,9 +159,8 @@ class BlockRenderer
             $script = $this->removeWrappedScriptTags($scriptHtmlString);
             if ($forPageBuilder) {
                 return '<script>' . $script . '</script>';
-            } else {
-                return $this->wrapScriptWithScopeAndContextData($script);
             }
+            return $this->wrapScriptWithScopeAndContextData($script);
         }
         return '';
     }
@@ -170,8 +194,7 @@ class BlockRenderer
         $html .= 'let blockSelector = "." + block.className;';
         $html .= $script;
         $html .= '});';
-        $html .= '</script>';
-        return $html;
+        return $html . '</script>';
     }
 
     /**
@@ -192,13 +215,7 @@ class BlockRenderer
             $controller->init($model, $this->page, $this->forPageBuilder);
             $controller->handleRequest();
         }
-
-        if (isset($blockData['html'])) {
-            $html = $blockData['html'];
-        } else {
-            $html = file_get_contents($themeBlock->getViewFile());
-        }
-        return $html;
+        return $blockData['html'] ?? file_get_contents($themeBlock->getViewFile());
     }
 
     /**
@@ -218,6 +235,9 @@ class BlockRenderer
             require_once $themeBlock->getModelFile();
             $modelClass = $themeBlock->getModelClass();
             $model = new $modelClass($themeBlock, $blockData, $this->page, $this->forPageBuilder);
+            if ($model->doNotRender()) {
+                return '';
+            }
         }
 
         if ($themeBlock->getControllerFile()) {
@@ -232,6 +252,8 @@ class BlockRenderer
         $renderer = $this;
         $page = $this->page;
         $block = $model;
+        $hasSkeleton = $model->hasSkeleton();
+        $hasDynamicSkeleton = $model->hasDynamicSkeleton();
 
         // unset variables that should be inaccessible inside the view
         unset($controller, $model, $blockData);
@@ -240,6 +262,17 @@ class BlockRenderer
         require $themeBlock->getViewFile();
         $html = ob_get_contents();
         ob_end_clean();
+
+        if ($hasSkeleton) {
+            $className = 'skeleton-' . $themeBlock->getSlug() . ' skeleton-data';
+            if (phpb_is_skeleton_data_request()) {
+                return "<span class='{$className}'>{$html}</span>";
+            } elseif ($hasDynamicSkeleton) {
+                return "<span class='{$className}'>{$html}</span>";
+            } else {
+                return "<span class='{$className}'></span>";
+            }
+        }
 
         return $html;
     }

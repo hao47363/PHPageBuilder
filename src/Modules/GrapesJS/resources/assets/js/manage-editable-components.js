@@ -4,6 +4,7 @@
      * After loading GrapesJS, add all theme blocks and activate the editable blocks in the main language.
      */
     function afterGrapesJSLoaded() {
+        setupThemeBlockThumbsLazyLoading();
         addThemeBlocks();
 
         // add page injection script with page-loaded event to the end of the body tag of initialComponents,
@@ -45,6 +46,46 @@
                 }
             }
         }
+    }
+
+    /**
+     * Setup lazy loading for theme block thumbnails avoiding large number of thumb image requests on pagebuilder load.
+     */
+    function setupThemeBlockThumbsLazyLoading() {
+        if (! ("IntersectionObserver" in window)) {
+            return;
+        }
+
+        window.initLazyLoading = function() {
+            var lazyBackgroundObserver = new IntersectionObserver(function(entries, observer) {
+                entries.forEach(function(entry) {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add("bg-in-view");
+                        lazyBackgroundObserver.unobserve(entry.target);
+                        // when loading the second swiper slide load all others
+                        if (entry.target.dataset && parseInt(entry.target.dataset.swiperSlideIndex) > 0) {
+                            entry.target.parentElement.classList.add('children-in-view');
+                        }
+                    }
+                });
+            });
+
+            var newLazyBackgrounds = [].slice.call(document.querySelectorAll(".block-thumb:not(.bg-observing)"));
+            newLazyBackgrounds.forEach(function(lazyBackground) {
+                lazyBackgroundObserver.observe(lazyBackground);
+                lazyBackground.classList.add("bg-observing");
+            });
+        }
+
+        // add style to hide all elements with lazy background loading
+        var cssString = '<style>' +
+            '*:not(.children-in-view) > .block-thumb:not(.bg-in-view) { background: none !important; }' +
+            '</style>';
+        document.head.insertAdjacentHTML('beforeend', cssString);
+
+        document.addEventListener("DOMContentLoaded", function () {
+            window.initLazyLoading();
+        });
     }
 
     /**
@@ -122,6 +163,11 @@
             window.runScriptsOfComponentAndChildren(container);
         });
         window.setWaiting(false);
+
+        setTimeout(function() {
+            window.changesOffset = window.editor.getModel().get('changesCount');
+            window.afterInitialRendering = true;
+        }, 250);
     });
 
     /**
@@ -197,6 +243,18 @@
             if (! component.attributes.draggable) {
                 $(".gjs-toolbar .fa-arrows.gjs-toolbar-item").hide();
             }
+            if (! component.attributes.removable && ! component.attributes.copyable && ! component.attributes.draggable) {
+                window.editor.select(component.parent());
+            }
+
+            let blockSlug = component.attributes['block-slug'];
+            if (blockSlug && window.themeBlocks[blockSlug]) {
+                let labelHtml = window.themeBlocks[blockSlug]['label'];
+                let labelTextParts = labelHtml.split("</div>");
+                if (labelTextParts.length > 1) {
+                    $(".gjs-toolbar").attr('title', "Bloknaam: " + labelTextParts[1]);
+                }
+            }
         }, 0);
     });
 
@@ -264,7 +322,7 @@
      */
     window.editor.on('block:drag:stop', function(droppedComponent) {
         // ensure component drop was successful
-        if (! droppedComponent) return;
+        if (! droppedComponent || ! droppedComponent.attributes || ! droppedComponent.attributes.attributes) return;
 
         let draggedBlockId = generateId();
         droppedComponent.attributes.attributes['dropped-component-id'] = draggedBlockId;
@@ -303,8 +361,9 @@
                 container.components().each(function(componentSibling) {
                     if (componentSibling.cid === component.cid) {
                         // replace the <phpb-block> by the actual component
-                        // the component is wrapped with a div to allow block styling (via a unique .style-identifier selector)
-                        blockRootComponent = component.replaceWith({tagName: 'div'});
+                        // the component is wrapped with a wrapper element to allow block styling (via a unique .style-identifier selector)
+                        let wrapperElement = ('wrapper' in component.attributes.attributes) ? component.attributes.attributes['wrapper'] : 'div';
+                        blockRootComponent = component.replaceWith({tagName: wrapperElement});
                         blockRootComponent.attributes['is-style-wrapper'] = true;
                         clone.components().each(function(componentChild) {
                             blockRootComponent.append(cloneComponent(componentChild));
@@ -503,6 +562,10 @@
                 relativeIds.push(blockId);
                 let componentToSelect = findChildViaBlockIdsPath(container, relativeIds.reverse());
                 window.editor.select(componentToSelect);
+
+                // trigger resize event to ensure all components are updated based on the new block settings
+                let iframeWindow = document.querySelector('iframe').contentWindow;
+                iframeWindow.dispatchEvent(new Event('resize'));
             },
             error: function() {
                 $(".gjs-frame").contents().find("#" + component.ccid).removeClass('gjs-freezed');
@@ -617,7 +680,7 @@
         } else if (component.attributes['block-slug'] !== undefined) {
             // change visibility of child elements that depend on whether this block is editable
             component.find('[phpb-hide-if-not-editable]').forEach((element) => {
-                if (allowEditableComponents) {
+                if (allowEditableComponents || window.afterInitialRendering) {
                     element.addClass('editable');
                 } else {
                     element.removeClass('editable');
@@ -756,7 +819,7 @@
         // get component identifier class if one is already added to the component's html when saving the pagebuilder previously
         let componentIdentifier = false;
         component.getClasses().forEach(componentClass => {
-            if (componentClass.startsWith('ID') && componentClass.length === 16) {
+            if (componentClass.startsWith('ID') && componentClass.length >= 16) {
                 componentIdentifier = componentClass;
             }
         });

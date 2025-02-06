@@ -15,12 +15,10 @@
 
 <div id="gjs"></div>
 
-<script type="text/javascript" src="https://cdn.ckeditor.com/4.14.0/full-all/ckeditor.js"></script>
-<script type="text/javascript" src="<?= phpb_asset('pagebuilder/grapesjs-plugin-ckeditor-v0.0.9.min.js') ?>"></script>
+<!--<script type="text/javascript" src="https://cdn.ckeditor.com/4.21.0/full-all/ckeditor.js"></script>-->
+<script type="text/javascript" src="<?= phpb_asset('pagebuilder/ckeditor4-full-4.21.0/ckeditor.js') ?>"></script>
+<script type="text/javascript" src="<?= phpb_asset('pagebuilder/grapesjs-plugin-ckeditor-v0.0.10.min.js') ?>"></script>
 <script type="text/javascript" src="<?= phpb_asset('pagebuilder/grapesjs-touch-v0.1.1.min.js') ?>"></script>
-<!-- TODO: hard coded to add the pagebuilder/grapesjs-component-code-editor.min.js and grapesjs-parser-postcss.min.js-->
-<script type="text/javascript" src="<?= phpb_asset('pagebuilder/grapesjs-component-code-editor.min.js') ?>"></script>
-<script type="text/javascript" src="<?= phpb_asset('pagebuilder/grapesjs-parser-postcss.min.js') ?>"></script>
 <script type="text/javascript">
 CKEDITOR.dtd.$editable.a = 1;
 CKEDITOR.dtd.$editable.b = 1;
@@ -33,8 +31,15 @@ CKEDITOR.dtd.$editable.ol = 1;
 CKEDITOR.dtd.$editable.ul = 1;
 CKEDITOR.dtd.$editable.table = 1;
 
+<?php
+$currentLanguage = in_array(phpb_config('general.language'), phpb_active_languages()) ?
+    phpb_config('general.language') : array_keys(phpb_active_languages())[0];
+if (! empty($_SESSION['phpagebuilder_language'])) {
+    $currentLanguage = $_SESSION['phpagebuilder_language'];
+}
+?>
 window.languages = <?= json_encode(phpb_active_languages()) ?>;
-window.currentLanguage = <?= in_array(phpb_config('general.language'), phpb_active_languages()) ? json_encode(phpb_config('general.language')) : json_encode(array_keys(phpb_active_languages())[0]) ?>;
+window.currentLanguage = <?= json_encode($currentLanguage) ?>;
 window.translations = <?= json_encode(phpb_trans('pagebuilder')) ?>;
 window.contentContainerComponents = <?= json_encode($pageBuilder->getPageComponents($page)) ?>;
 window.themeBlocks = <?= json_encode($blocks) ?>;
@@ -55,8 +60,9 @@ if (window.customConfig !== undefined) {
 
 window.initialComponents = <?= json_encode($pageRenderer->render()) ?>;
 window.initialStyle = <?= json_encode($pageBuilder->getPageStyleComponents($page)) ?>;
+window.initialCss = <?= json_encode($pageBuilder->getPageStyleCss($page)) ?>;
 window.grapesJSTranslations = {
-    <?= phpb_config('general.language') ?>: {
+    <?= $currentLanguage ?>: {
         styleManager: {
             empty: '<?= phpb_trans('pagebuilder.style-no-element-selected') ?>'
         },
@@ -104,14 +110,18 @@ require __DIR__ . '/grapesjs/trait-manager.php';
 </button>
 <div id="sidebar-header">
     <?php
-    if (sizeof(phpb_active_languages()) > 1):
+    if (count(phpb_active_languages()) > 1):
     ?>
     <div id="language-selector">
         <select class="selectpicker" data-width="fit">
             <?php
             foreach (phpb_active_languages() as $languageCode => $languageTranslation):
             ?>
-            <option value="<?= phpb_e($languageCode) ?>" <?= phpb_config('general.language') === $languageCode ? 'selected' : '' ?>><?= phpb_e($languageTranslation) ?></option>
+            <option value="<?= phpb_e($languageCode) ?>" <?= $languageCode === $currentLanguage ? 'selected' : '' ?>
+                    data-content='<span class="flag-icon flag-icon-<?= phpb_e($languageCode) ?>"></span><span class="language-name ml-1"><?= phpb_e($languageTranslation) ?></span>'>
+                >
+                <?= phpb_e($languageTranslation) ?>
+            </option>
             <?php
             endforeach;
             ?>
@@ -120,21 +130,17 @@ require __DIR__ . '/grapesjs/trait-manager.php';
     <?php
     endif;
     ?>
-</div>
-
-<div id="sidebar-bottom-device">
-    <a id="set-dekstop-view" class="btn set-view" data-view="Desktop">
-        <i class="fa fa-desktop"></i>
-        Desktop
-    </a>
-    <a id="set-tablet-view" class="btn set-view" data-view="Tablet">
-        <i class="fa fa-tablet"></i>
-        Tablet
-    </a>
-    <a id="set-mobile-view" class="btn set-view" data-view="Mobile">
-        <i class="fa fa-mobile"></i>
-        Mobile
-    </a>
+    <style>
+        <?php
+        foreach (phpb_active_languages() as $languageCode => $languageTranslation):
+        ?>
+        .flag-icon-<?= $languageCode ?> {
+            background-image: url(<?= phpb_asset('pagebuilder/images/flags/' . $languageCode . '.svg') ?>);
+        }
+        <?php
+        endforeach;
+        ?>
+    </style>
 </div>
 
 <div id="sidebar-bottom-buttons">
@@ -144,7 +150,7 @@ require __DIR__ . '/grapesjs/trait-manager.php';
         <?= phpb_trans('pagebuilder.save-page') ?>
     </button>
 
-    <a id="view-page" href="<?= phpb_e(phpb_full_url(phpb_config('pagebuilder.actions.view') . $page->getRoute() . '?pageId=' . $page->getId())) ?>" target="_blank" class="btn">
+    <a id="view-page" href="<?= phpb_e(phpb_full_url($page->getRoute())) ?>" target="_blank" class="btn">
         <i class="fa fa-external-link"></i>
         <?= phpb_trans('pagebuilder.view-page') ?>
     </a>
@@ -157,5 +163,11 @@ require __DIR__ . '/grapesjs/trait-manager.php';
 
 <div id="block-search">
     <i class="fa fa-search"></i>
-    <input type="text" class="form-control" placeholder="Filter">
+    <input type="text" class="form-control" placeholder="<?= phpb_trans('pagebuilder.filter-placeholder') ?>">
 </div>
+
+<style>
+.cke_notifications_area {
+    display: none !important;
+}
+</style>
